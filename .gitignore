@@ -130,3 +130,6 @@ dmypy.json
 
 .direnv
 .envrc
+conda_env.yml
+MUJOCO_LOG.TXT
+logs

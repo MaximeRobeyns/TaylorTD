@@ -56,22 +56,34 @@ class TD3(nn.Module):
     ):
         super().__init__()
 
+        # Create the actor network. This is a simple MLP.
+        # A forward pass maps states to a vector of actions, bound to [-1, 1] by tanh
         self.actor = Actor(d_state, d_action, policy_n_layers, policy_n_units, policy_activation).to(device)
+        # Copy of the actor with frozen weights.
         self.actor_target = copy.deepcopy(self.actor)
+        # Optimisation algorithm for the actor.
         self.actor_optimizer = RAdam(self.actor.parameters(), lr=policy_lr)
 
+        # Create teh critic; similarly to the actor, this is just an MLP.
         self.critic = ActionValueFunction(d_state, d_action, value_n_layers, value_n_units, value_activation).to(device)
+        # Frozen version of the critic network
         self.critic_target = copy.deepcopy(self.critic)
+        # Critic activation function
         self.critic_optimizer = RAdam(self.critic.parameters(), lr=value_lr)
 
+        # γ term
         self.discount = gamma
+        # soft target network update mixing factor
         self.tau = tau
         self.policy_delay = policy_delay
         self.policy_noise = policy_noise
         self.noise_clip = noise_clip
+        # exploration noise / dithering strategy
         self.expl_noise = expl_noise
+        # normalizer pre-processes states
         self.normalizer = None
         self.value_loss = value_loss
+        # prevents catestrophic weight movements
         self.grad_clip = grad_clip
         self.device = device
         self.last_actor_loss = 0
@@ -84,6 +96,8 @@ class TD3(nn.Module):
         self.normalizer = copy.deepcopy(normalizer)
 
     def get_action(self, states, deterministic=False):
+        """Get action gets the action vector; a vector of elements bound to the
+        [-1, 1] range. Can be interpreted as logits."""
         states = states.to(self.device)
         with torch.no_grad():
             if self.normalizer is not None:
@@ -94,6 +108,7 @@ class TD3(nn.Module):
             return actions.clamp(-1, +1)
 
     def get_action_with_logp(self, states):
+        """Returns action vector, with gradient info???"""
         states = states.to(self.device)
         if self.normalizer is not None:
             states = self.normalizer.normalize_states(states)
@@ -101,21 +116,27 @@ class TD3(nn.Module):
         return a, torch.ones(a.shape[0], device=a.device) * np.inf  # inf: should not be used
 
     def get_action_value(self, states, actions):
+        """Returns Q(s, a) by calling the critic."""
         with torch.no_grad():
             states = states.to(self.device)
             actions = actions.to(self.device)
             return self.critic(states, actions)[0]  # just q1
 
     def update(self, states, actions, logps, rewards, next_states, masks):
+        """Seemingly the main event"""
         if self.normalizer is not None:
+            # normalise / pre-process state information, both this state and
+            # next state.
             states = self.normalizer.normalize_states(states)
             next_states = self.normalizer.normalize_states(next_states)
         self.step_counter += 1
 
+        ## Noise-corrupted action vector:
         # Select action according to policy and add clipped noise
         noise = (
                 torch.randn_like(actions) * self.policy_noise
         ).clamp(-self.noise_clip, self.noise_clip)
+        # frozen next action vector
         raw_next_actions = self.actor_target(next_states)
         next_actions = (raw_next_actions + noise).clamp(-1, 1)
 

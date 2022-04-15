@@ -11,7 +11,6 @@ warnings.filterwarnings(action='ignore', module='gym', category=FutureWarning)
 from time import perf_counter
 from dotmap import DotMap
 from functools import wraps
-from pathlib import Path
 
 import numpy as np
 import torch
@@ -19,7 +18,6 @@ import os
 import sacred
 import gym
 import neptune
-import sys
 from env_loop import EnvLoop
 from datetime import datetime
 from logger import configure_logger

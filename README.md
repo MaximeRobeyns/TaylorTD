@@ -58,7 +58,9 @@ export LD_PRELOAD=/usr/lib64/libstdc++.so.6
 In order to render things, you will also need `GLEW`. Using anaconda
 
 ``` sh
-conda install -c conda-forge glew
+conda install -c conda-forge glew mesalib patchelf gxx gcc
+conda install -c anaconda mesa-libgl-cos6-x86_64 swig
+conda install -c menpo glfw3
 ```
 
 now, in `.envrc`:
@@ -73,6 +75,7 @@ We will begin with PyTorch and CUDA libraries, since the CUDA libraries are
 added to the linker path and may be used by other packages later on.
 
 ``` sh
+conda install python=3.9
 conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
 ```
 
