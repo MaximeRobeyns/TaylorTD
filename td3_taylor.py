@@ -29,7 +29,12 @@ class ActionValueFunction(nn.Module):
         return self.layers(x)
 
 
-class TD3(nn.Module):
+class TD3_Taylor(nn.Module):
+    """
+
+    TODO: actually update this class to implement the taylor rl udpate step.
+
+    """
     def __init__(
             self,
             d_state,
@@ -51,8 +56,7 @@ class TD3(nn.Module):
             policy_noise=0.2,
             noise_clip=0.5,
             expl_noise=0.1,
-            tdg_error_weight=0,
-            td_error_weight=1,
+            action_cov=0.1,
     ):
         super().__init__()
 
@@ -64,14 +68,13 @@ class TD3(nn.Module):
         # Optimisation algorithm for the actor.
         self.actor_optimizer = RAdam(self.actor.parameters(), lr=policy_lr)
 
-        # Create teh critic; similarly to the actor, this is just an MLP.
+        # Create the critic; similarly to the actor, this is just an MLP.
         self.critic = ActionValueFunction(d_state, d_action, value_n_layers, value_n_units, value_activation).to(device)
         # Frozen version of the critic network
         self.critic_target = copy.deepcopy(self.critic)
         # Critic activation function
         self.critic_optimizer = RAdam(self.critic.parameters(), lr=value_lr)
 
-        # γ term
         self.discount = gamma
         # soft target network update mixing factor
         self.tau = tau
@@ -88,8 +91,7 @@ class TD3(nn.Module):
         self.device = device
         self.last_actor_loss = 0
 
-        self.tdg_error_weight = tdg_error_weight
-        self.td_error_weight = td_error_weight
+        self.action_cov = action_cov
         self.step_counter = 0
 
     def setup_normalizer(self, normalizer):
@@ -151,30 +153,47 @@ class TD3(nn.Module):
         q1, q2 = self.critic(states, actions)
         q1_td_error, q2_td_error = q_target - q1, q_target - q2
 
-        critic_loss, standard_loss, gradient_loss = torch.tensor(0, device=self.device), torch.tensor(0, device=self.device), torch.tensor(0, device=self.device)
-        if self.td_error_weight != 0:
-            # Compute standard critic loss
-            if self.value_loss == 'huber':
-                standard_loss = 0.5 * (F.smooth_l1_loss(q1_td_error, zero_targets) + F.smooth_l1_loss(q2_td_error, zero_targets))
-            elif self.value_loss == 'mse':
-                standard_loss = 0.5 * (F.mse_loss(q1_td_error, zero_targets) + F.mse_loss(q2_td_error, zero_targets))
-            critic_loss = critic_loss + self.td_error_weight * standard_loss
-        if self.tdg_error_weight != 0:
-            # Compute gradient critic loss
-            gradients_error_norms1 = torch.autograd.grad(outputs=q1_td_error, inputs=actions,
-                                                         grad_outputs=torch.ones(q1_td_error.size(), device=self.device),
-                                                         retain_graph=True, create_graph=True,
-                                                         only_inputs=True)[0].flatten(start_dim=1).norm(dim=1, keepdim=True)
-            gradients_error_norms2 = torch.autograd.grad(outputs=q2_td_error, inputs=actions,
-                                                         grad_outputs=torch.ones(q2_td_error.size(), device=self.device),
-                                                         retain_graph=True, create_graph=True,
-                                                         only_inputs=True)[0].flatten(start_dim=1).norm(dim=1, keepdim=True)
-            if self.value_loss == 'huber':
-                gradient_loss = 0.5 * (F.smooth_l1_loss(gradients_error_norms1, zero_targets) + F.smooth_l1_loss(gradients_error_norms2, zero_targets))
-            elif self.value_loss == 'mse':
-                gradient_loss = 0.5 * (F.mse_loss(gradients_error_norms1, zero_targets) + F.mse_loss(gradients_error_norms2, zero_targets))
-            # loss = ∇ₐ δ(s, a, s') + λ|δ(s, a, s')|
-            critic_loss = critic_loss + self.tdg_error_weight * gradient_loss
+        # We apply Taylor Direct / Residual updates with both q1_td_error and q2_td_error.
+        # q1_td_error and q2_td_error are O
+
+        critic_loss, td_loss, ag_loss = torch.tensor(0, device=self.device), torch.tensor(0, device=self.device), torch.tensor(0, device=self.device)
+
+        #
+        # 1st order residual updates ============================================================
+        #
+
+        # 1. square the td error
+        q1_td_err_2 = (q1_td_error.unsqueeze(-2) @ q1_td_error.unsqueeze(-1)).squeeze(-1)
+        q2_td_err_2 = (q2_td_error.unsqueeze(-2) @ q2_td_error.unsqueeze(-1)).squeeze(-1)
+
+        # Compute standard critic loss
+        if self.value_loss == 'huber':
+            td_loss = 0.5 * (F.smooth_l1_loss(q1_td_err_2, zero_targets) + F.smooth_l1_loss(q2_td_err_2, zero_targets))
+        elif self.value_loss == 'mse':
+            td_loss = 0.5 * (F.mse_loss(q1_td_err_2, zero_targets) + F.mse_loss(q2_td_err_2, zero_targets))
+
+
+        # Compute gradient critic loss
+        dac1 = torch.autograd.grad(outputs=q1_td_error, inputs=actions,
+                                                     grad_outputs=torch.ones(q1_td_error.size(), device=self.device),
+                                                     retain_graph=True, create_graph=True,
+                                                     only_inputs=True)[0].flatten(start_dim=1).norm(dim=1, keepdim=True)
+        dac2 = torch.autograd.grad(outputs=q2_td_error, inputs=actions,
+                                                     grad_outputs=torch.ones(q2_td_error.size(), device=self.device),
+                                                     retain_graph=True, create_graph=True,
+                                                     only_inputs=True)[0].flatten(start_dim=1).norm(dim=1, keepdim=True)
+
+        dac1_2 = (dac1.unsqueeze(-2) @ dac1.unsqueeze(-1)).squeeze(-1)
+        dac2_2 = (dac2.unsqueeze(-2) @ dac2.unsqueeze(-1)).squeeze(-1)
+
+        if self.value_loss == 'huber':
+            ag_loss = 0.5 * (F.smooth_l1_loss(dac1_2, zero_targets) + F.smooth_l1_loss(dac2_2, zero_targets))
+        elif self.value_loss == 'mse':
+            ag_loss = 0.5 * (F.mse_loss(dac1_2, zero_targets) + F.mse_loss(dac2_2, zero_targets))
+        critic_loss = td_loss + self.action_cov * ag_loss
+
+        # TODO add options to compute 2nd order residual updates, as well as
+        # 1st and 2nd order direct updates.
 
         # Optimize the critic
         self.critic_optimizer.zero_grad()
@@ -203,8 +222,9 @@ class TD3(nn.Module):
         for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
-        return raw_next_actions[0, 0].item(), self.td_error_weight * standard_loss.item(), self.tdg_error_weight * gradient_loss.item(), self.last_actor_loss
+        return raw_next_actions[0, 0].item(), td_loss.item(), self.action_cov * ag_loss.item(), self.last_actor_loss
 
     @staticmethod
     def catastrophic_divergence(q_loss, pi_loss):
-        return q_loss > 1e2 or (pi_loss is not None and abs(pi_loss) > 1e5)
+        return False
+        # return q_loss > 1e2 or (pi_loss is not None and abs(pi_loss) > 1e5)

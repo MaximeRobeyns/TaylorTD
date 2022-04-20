@@ -43,7 +43,12 @@ class Actor(nn.Module):
         return torch.tanh(self.layers(state))  # Bound to -1,1
 
 
-class DDPG(nn.Module):
+class DDPG_Taylor(nn.Module):
+    """
+
+    TODO: actually update this class to implement the Taylor RL update step.
+
+    """
     def __init__(
             self,
             d_state,

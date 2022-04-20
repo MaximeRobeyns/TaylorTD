@@ -33,7 +33,9 @@ import sacred_utils  # For a custom mongodb flag
 from radam import RAdam
 from reward_model import RewardModel
 from td3 import TD3
+from td3_taylor import TD3_Taylor
 from ddpg import DDPG
+from ddpg_taylor import DDPG_Taylor
 from wrappers import BoundedActionsEnv, IsDoneEnv, MuJoCoCloseFixWrapper, RecordedEnv
 from buffer import Buffer
 from models import Model
@@ -149,10 +151,12 @@ def policy_arch_config():
     # Parameters for TD3
     td3_policy_delay = 2
     td3_expl_noise = 0.1
+    td3_action_cov = 0.1                            # λ in Taylor RL (covariance of action points)
 
     # TD-Gradient parameters
     tdg_error_weight = 5.                           # weight to be used for value gradient td learning (in the paper we use alpha=1/tdg_error_weight=0.2)
     td_error_weight = 1.                            # weight for the standard td error for q learning
+
 
 
 # noinspection PyUnusedLocal
@@ -179,6 +183,7 @@ def infra_config():
 
 @ex.capture
 def setup(seed, dump_dir, omp_num_threads, print_config, _run):
+    """Sets random seeds and environment variables"""
     if print_config:
         ex.commands["print_config"]()
         print('Shell command:', sacred_utils.get_shell_command())
@@ -198,10 +203,14 @@ def setup(seed, dump_dir, omp_num_threads, print_config, _run):
 
 @ex.capture
 def get_env(env_name, record):
+    """Setup the Gym environment"""
     env = gym.make(env_name)
+    # clips actions before calling step.
     env = BoundedActionsEnv(env)
 
+    # Adds done condition
     env = IsDoneEnv(env)
+    # Allows us to close mujoco better
     env = MuJoCoCloseFixWrapper(env)
     if record:
         env = RecordedEnv(env)
@@ -220,8 +229,16 @@ def get_agent(mode, *, agent_alg):
     logger.debug(f"{ex.step_i:6d} | {mode} | getting fresh agent ...")
     if agent_alg == 'td3':
         return get_td3_agent()
+
+    if agent_alg == 'td3_taylor':
+        return get_td3_taylor_agent()
+
     if agent_alg == 'ddpg':
         return get_ddpg_agent()
+
+    if agent_alg == 'ddpg_taylor':
+        return get_ddpg_taylor_agent()
+
     raise ValueError(f'Unknown agent alg {agent_alg}')
 
 
@@ -236,12 +253,32 @@ def get_td3_agent(*, d_state, d_action, discount, device, value_tau, value_loss,
                grad_clip=agent_grad_clip, policy_delay=td3_policy_delay,
                tdg_error_weight=tdg_error_weight, td_error_weight=td_error_weight, expl_noise=td3_expl_noise)
 
+@ex.capture
+def get_td3_taylor_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
+                  value_lr, policy_n_units, value_n_units, policy_n_layers, value_n_layers, policy_activation,
+                  value_activation, agent_grad_clip, td3_policy_delay, td3_action_cov, td3_expl_noise):
+    return TD3_Taylor(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
+               value_loss=value_loss, policy_lr=policy_lr, value_lr=value_lr,
+               policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
+               policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
+               grad_clip=agent_grad_clip, policy_delay=td3_policy_delay,
+               action_cov=td3_action_cov, expl_noise=td3_expl_noise)
 
 @ex.capture
 def get_ddpg_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
                    value_lr, policy_n_units, value_n_units, policy_n_layers, value_n_layers, policy_activation,
                    value_activation, agent_grad_clip, tdg_error_weight, td_error_weight):
     return DDPG(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
+                value_loss=value_loss, policy_lr=policy_lr, value_lr=value_lr,
+                policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
+                policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
+                grad_clip=agent_grad_clip, tdg_error_weight=tdg_error_weight, td_error_weight=td_error_weight)
+
+@ex.capture
+def get_ddpg_taylor_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
+                          value_lr, policy_n_units, value_n_units, policy_n_layers, value_n_layers, policy_activation,
+                          value_activation, agent_grad_clip, tdg_error_weight, td_error_weight):
+    return DDPG_Taylor(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
                 value_loss=value_loss, policy_lr=policy_lr, value_lr=value_lr,
                 policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
                 policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
@@ -355,6 +392,7 @@ def get_training_data_provider(model, buffer, is_done, task):
 @ex.capture
 def train_agent(agent, model, reward_model, buffer, task, task_name, is_done, mode, context_i, *, _run, device,
                 policy_training_n_updates_per_iter, agent_alg, train_reward, policy_training_n_iters):
+    """Policy optimisation step"""
     data_provider = get_training_data_provider(model, buffer, is_done, task)
 
     q_loss, pi_loss = np.nan, np.nan
@@ -551,6 +589,7 @@ def get_neptune_ex(*, neptune_project, _run):
 
 class MainTrainingLoop:
     """ Resembles ray.Trainable """
+
     @ex.capture
     def __init__(self, *, task_name):
         logger.info(f"Executing training...")
@@ -561,15 +600,23 @@ class MainTrainingLoop:
         self.exploitation_task = tmp_env.tasks()[task_name]
         del tmp_env
 
-        # Constitute the state of Trainable
         ex.step_i = 0
+        # initialise the state-space forward model
+        # Q: s × a → (μ, σ), where s' ∼ N(μ,σ²)
+        # Note that this uses an ensemble network to calculate uncertainty; we
+        # could replace it with an epinet.
         self.model = get_model()
+        # f: s × a × s' → r
         self.reward_model = get_reward_model()
+        # Uses the 'Rectified Adam' (arxiv.org/abs/1908.03265) optimiser
         self.model_optimizer = get_model_optimizer(self.model.parameters())
         self.reward_model_optimizer = get_reward_model_optimizer(self.reward_model.parameters())
         self.buffer = get_buffer()
         self.agent = get_agent(mode='train')
+        # setup state, action, state_delta normalisation
         self.agent.setup_normalizer(self.buffer.normalizer)
+        # computes rewards for each time step in the episode. when episode
+        # ends, this logs the total return and episode length
         self.stats = EpisodeStats(self.eval_tasks)
         self.last_avg_eval_score = None
         self.neptune_ex = None
@@ -583,12 +630,15 @@ class MainTrainingLoop:
 
     @ex.capture
     def _common_setup(self, *, render, record, dump_dir, _run):
-        """ Called in __init__ but needs also to be called after restore (due to reinitialized randomness) """
+        """ Called in __init__ but needs also to be called after restore (due
+        to reinitialized randomness)
+        """
         video_file_base = dump_dir + "/max_exploitation_step_{}.mp4" if dump_dir is not None else None
         self.env_loop = EnvLoop(get_env, render=render, record=record, video_file_base=video_file_base, run=_run)
 
     def _setup_if_new(self):
-        """ Executed for a new experiment only. This is a workaround for Trainable. """
+        """ Executed for a new experiment only. This is a workaround for
+        Trainable. """
         if self.new_experiment:
             self.new_experiment = False
             self.neptune_ex = get_neptune_ex()
@@ -603,14 +653,22 @@ class MainTrainingLoop:
 
         ex.step_i += 1
 
+        # Get the agent; π_θ.
         behavioral_agent = self.random_agent if ex.step_i <= n_warm_up_steps else self.agent
+        # Get the action, a = π_θ(s)
         with torch.no_grad():
             action = behavioral_agent.get_action(self.env_loop.state, deterministic=False).to('cpu')
+        # save s
         prev_state = self.env_loop.state.clone().to(device)
+
         if record and (ex.step_i == 1 or ex.step_i % record_freq == 0):
             self.env_loop.record_next_episode()
+
+        # take a step, s, s' p()
         state, next_state, done = self.env_loop.step(to_np(action), video_file_suffix=ex.step_i)
+        # get reward; r = E(s, a, s')
         reward = self.exploitation_task(state, action, next_state).item()
+        # add transition to the buffer; (s, a, s', r)
         self.buffer.add(state, action, next_state, torch.from_numpy(np.array([[reward]], dtype=np.float)))
         self.stats.add(state, action, next_state, done)
         if done:
@@ -628,8 +686,12 @@ class MainTrainingLoop:
 
         # (Re)train the model on the current buffer
         if model_training_freq is not None and model_training_n_batches > 0 and ex.step_i % model_training_freq == 0:
+            # setup normalisation for actor and critic
             self.model.setup_normalizer(self.buffer.normalizer)
             self.reward_model.setup_normalizer(self.buffer.normalizer)
+            #
+            # train_model is the main event.
+            #
             timed(train_model)(self.model, self.model_optimizer, self.buffer, mode='train')
             if train_reward:
                 task = self.exploitation_task
@@ -639,6 +701,9 @@ class MainTrainingLoop:
         if ex.step_i >= n_warm_up_steps and ex.step_i % policy_training_freq == 0:
             task = self.exploitation_task
             self.agent.setup_normalizer(self.buffer.normalizer)
+            #
+            # train_agent is the main event.
+            #
             self.agent = timed(train_agent)(self.agent, self.model, self.reward_model, self.buffer, task=task, task_name=task_name, is_done=self.is_done,
                                             mode='train', context_i={})
 
@@ -664,9 +729,11 @@ class MainTrainingLoop:
 
 @ex.automain
 def train():
+    # main entrypoint.
     setup()
     training = MainTrainingLoop()
 
+    # dot-access dict subclass.
     res = DotMap(done=False)
     while not res.done:
         res = training.train()

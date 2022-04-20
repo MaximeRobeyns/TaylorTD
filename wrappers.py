@@ -12,6 +12,9 @@ else:
 
 
 class BoundedActionsEnv(gym.Wrapper):
+    """A wrapper around the environment which clips actions to the [-1, 1]
+    range.
+    """
     def __init__(self, env, mode="numpy"):
         super().__init__(env)
         self.action_space = gym.spaces.Box(low=-1, high=1, shape=self.unwrapped.action_space.shape)
@@ -65,11 +68,14 @@ class RecordedEnv(gym.Wrapper):
 
 class IsDoneEnv(gym.Wrapper):
     """
-        Wrapper correcting the "done" computation as the done computed by other wrappers is computed based on
-        raw states - when the NoisyEnv wrapper is applied on top of such states the noisyfied state done value
-        can differ from the non-noisyfied state done value
+        Wrapper correcting the "done" computation as the done computed by other
+        wrappers is computed based on raw states - when the NoisyEnv wrapper is
+        applied on top of such states the noisyfied state done value can differ
+        from the non-noisyfied state done value
 
-        NOTE: For the fix to work this wrapper need to be the last wrapper applied to the Env  # TODO: It is not. Is that comment correct?
+        NOTE: For the fix to work this wrapper need to be the last wrapper
+        applied to the Env
+        # TODO: It is not. Is that comment correct?
     """
 
     def __init__(self, env, mode="numpy"):
