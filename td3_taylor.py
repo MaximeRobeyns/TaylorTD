@@ -57,7 +57,7 @@ class TD3_Taylor(nn.Module):
             noise_clip=0.5,
             expl_noise=0.1,
             action_cov=0.1,
-            td3_update_type = 'residual'
+            td3_update = 'residual'
     ):
         super().__init__()
 
@@ -162,7 +162,7 @@ class TD3_Taylor(nn.Module):
         # Residual Vs Direct update ==========================================================
         
         # 1st order residual updates ------------------------------------
-        if td3_update_type == 'residual':  
+        if td3_update == 'residual':  
 
             # 1. square the td error
             q1_td_err_2 = (q1_td_error.unsqueeze(-2) @ q1_td_error.unsqueeze(-1)).squeeze(-1)

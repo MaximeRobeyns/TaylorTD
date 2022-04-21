@@ -44,7 +44,7 @@ from imagination import SingleStepImagination
 from utils import to_np, EpisodeStats
 
 
-ex = sacred.Experiment()
+ex = sacred.Experiment(save_git_info=False)# Needed to add it to run on BP as don't have python git dependecies...
 
 configure_logger()
 logger = logging.getLogger(__file__)
@@ -264,7 +264,7 @@ def get_td3_taylor_agent(*, d_state, d_action, discount, device, value_tau, valu
                policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
                policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
                grad_clip=agent_grad_clip, policy_delay=td3_policy_delay,
-               action_cov=td3_action_cov,td3_update_type, expl_noise=td3_expl_noise)
+               action_cov=td3_action_cov,td3_update =td3_update_type , expl_noise=td3_expl_noise)
 
 @ex.capture
 def get_ddpg_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
