@@ -152,8 +152,9 @@ def policy_arch_config():
     td3_policy_delay = 2
     td3_expl_noise = 0.1
     td3_action_cov = 0.1                            # λ in Taylor RL (covariance of action points)
-    td3_update_type = 'residual'
-    
+    td3_update_type = 'residual'                    # 'residual' or 'direct'
+    td3_update_order = 1                            # 1 or 2
+
 
     # TD-Gradient parameters
     tdg_error_weight = 5.                           # weight to be used for value gradient td learning (in the paper we use alpha=1/tdg_error_weight=0.2)
@@ -229,6 +230,7 @@ def get_env(env_name, record):
 @ex.capture
 def get_agent(mode, *, agent_alg):
     logger.debug(f"{ex.step_i:6d} | {mode} | getting fresh agent ...")
+
     if agent_alg == 'td3':
         return get_td3_agent()
 
@@ -258,13 +260,15 @@ def get_td3_agent(*, d_state, d_action, discount, device, value_tau, value_loss,
 @ex.capture
 def get_td3_taylor_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
                   value_lr, policy_n_units, value_n_units, policy_n_layers, value_n_layers, policy_activation,
-                  value_activation, agent_grad_clip, td3_policy_delay, td3_action_cov,td3_update_type, td3_expl_noise):
+                  value_activation, agent_grad_clip, td3_policy_delay, td3_action_cov, td3_update_type, td3_update_order,
+                  td3_expl_noise):
     return TD3_Taylor(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
                value_loss=value_loss, policy_lr=policy_lr, value_lr=value_lr,
                policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
                policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
                grad_clip=agent_grad_clip, policy_delay=td3_policy_delay,
-               action_cov=td3_action_cov,td3_update =td3_update_type , expl_noise=td3_expl_noise)
+               action_cov=td3_action_cov, update_type=td3_update_type, update_order=td3_update_order,
+               expl_noise=td3_expl_noise)
 
 @ex.capture
 def get_ddpg_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,

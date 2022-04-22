@@ -1,5 +1,6 @@
 import copy
 import torch
+import logging
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -8,6 +9,7 @@ from models import ParallelLinear, get_activation
 from radam import RAdam
 import numpy as np
 
+logger = logging.getLogger(__file__)
 
 class ActionValueFunction(nn.Module):
     def __init__(self, d_state, d_action, n_layers, n_units, activation):
@@ -29,12 +31,11 @@ class ActionValueFunction(nn.Module):
         return self.layers(x)
 
 
+def inner_product_last_dim(A: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
+    return (A.unsqueeze(-2)@B.unsqueeze(-1)).squeeze(-1)
+
+
 class TD3_Taylor(nn.Module):
-    """
-
-    TODO: actually update this class to implement the taylor rl udpate step.
-
-    """
     def __init__(
             self,
             d_state,
@@ -57,7 +58,8 @@ class TD3_Taylor(nn.Module):
             noise_clip=0.5,
             expl_noise=0.1,
             action_cov=0.1,
-            td3_update = 'residual'
+            update_type = 'residual',
+            update_order = 1,
     ):
         super().__init__()
 
@@ -93,6 +95,8 @@ class TD3_Taylor(nn.Module):
         self.last_actor_loss = 0
 
         self.action_cov = action_cov
+        self.update_type = update_type
+        self.update_order = update_order
         self.step_counter = 0
 
     def setup_normalizer(self, normalizer):
@@ -158,89 +162,104 @@ class TD3_Taylor(nn.Module):
         # q1_td_error and q2_td_error are O
 
         critic_loss, td_loss, ag_loss = torch.tensor(0, device=self.device), torch.tensor(0, device=self.device), torch.tensor(0, device=self.device)
-        
+
+
+        if self.value_loss == 'huber':
+            loss_fn = F.smooth_l1_loss
+        elif self.value_loss == 'mse':
+            loss_fn = F.mse_loss
+        else:
+            raise ValueError(f'Unexpected loss: "{self.value_loss}"')
+
         # Residual Vs Direct update ==========================================================
-        
-        # 1st order residual updates ------------------------------------
-        if td3_update == 'residual':  
+        #
+        # Use
+        # >>> self.update_type = {'residual' | 'direct'}
+        # and
+        # >>> self.update_order = {1 | 2}
+        # to choose between the different update types.
 
-            # 1. square the td error
-            q1_td_err_2 = (q1_td_error.unsqueeze(-2) @ q1_td_error.unsqueeze(-1)).squeeze(-1)
-            q2_td_err_2 = (q2_td_error.unsqueeze(-2) @ q2_td_error.unsqueeze(-1)).squeeze(-1)
+        if self.update_type == 'residual':
 
-            
-            # Compute standard critic loss
-            if self.value_loss == 'huber':
-                td_loss = 0.5 * (F.smooth_l1_loss(q1_td_err_2, zero_targets) + F.smooth_l1_loss(q2_td_err_2, zero_targets))
-            elif self.value_loss == 'mse':
-                td_loss = 0.5 * (F.mse_loss(q1_td_err_2, zero_targets) + F.mse_loss(q2_td_err_2, zero_targets))
+            if self.update_order == 1:
 
+                # First order residual updates
+                # 𝔼[Δθ] = η ∇_θ [ δ(s, a₀)² + λ(∇ₐδ(s, a₀))ᵀ(∇ₐδ(s, a₀)) ].
 
-            # Compute gradient critic loss
-            dac1 = torch.autograd.grad(outputs=q1_td_error, inputs=actions,
-                                                         grad_outputs=torch.ones(q1_td_error.size(), device=self.device),
-                                                         retain_graph=True, create_graph=True,
-                                                         only_inputs=True)[0].flatten(start_dim=1).norm(dim=1, keepdim=True)
+                # 1. Square the td error; δ(s, a₀)² (for both critics)
+                # TD error is always scalar-valued (within each batch),
+                assert q1_td_error.size(-1) == 1 and q2_td_error.size(-1) == 1
+                q1_td_err_2 = q1_td_error**2
+                q2_td_err_2 = q2_td_error**2
 
-            dac2 = torch.autograd.grad(outputs=q2_td_error, inputs=actions,
-                                                         grad_outputs=torch.ones(q2_td_error.size(), device=self.device),
-                                                         retain_graph=True, create_graph=True,
-                                                         only_inputs=True)[0].flatten(start_dim=1).norm(dim=1, keepdim=True)
+                # 2. Compute the action-gradients; ∇ₐδ(s, a₀))
+                # Shape: [batch, actions]
+                dac1 = torch.autograd.grad(outputs=q1_td_error, inputs=actions,
+                                           grad_outputs=torch.ones(q1_td_error.size(), device=self.device),
+                                           retain_graph=True, create_graph=True,
+                                           only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
 
-            dac1_2 = (dac1.unsqueeze(-2) @ dac1.unsqueeze(-1)).squeeze(-1)
-            dac2_2 = (dac2.unsqueeze(-2) @ dac2.unsqueeze(-1)).squeeze(-1)
+                dac2 = torch.autograd.grad(outputs=q2_td_error, inputs=actions,
+                                           grad_outputs=torch.ones(q2_td_error.size(), device=self.device),
+                                           retain_graph=True, create_graph=True,
+                                           only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
 
-            if self.value_loss == 'huber':
-                ag_loss = 0.5 * (F.smooth_l1_loss(dac1_2, zero_targets) + F.smooth_l1_loss(dac2_2, zero_targets))
-            elif self.value_loss == 'mse':
-                ag_loss = 0.5 * (F.mse_loss(dac1_2, zero_targets) + F.mse_loss(dac2_2, zero_targets))
-        
-        # 1st order direct update -------------------------------------
-        else: 
-            
-            # Compute standard critic loss
-            if self.value_loss == 'huber':
-                td_loss = 0.5 * (F.smooth_l1_loss(q1_td_error, zero_targets) + F.smooth_l1_loss(q2_td_error, zero_targets))
-            elif self.value_loss == 'mse':
-                td_loss = 0.5 * (F.mse_loss(q1_td_error, zero_targets) + F.mse_loss(q2_td_error, zero_targets))
-            
-            # Compute gradient of TD-error with respect to action
-            dac1 = torch.autograd.grad(outputs=q1_td_error, inputs=actions,
-                                                         grad_outputs=torch.ones(q1_td_error.size(), device=self.device),
-                                                         retain_graph=True, create_graph=True,
-                                                         only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
-           
-            dac2 = torch.autograd.grad(outputs=q2_td_error, inputs=actions,
-                                                         grad_outputs=torch.ones(q2_td_error.size(), device=self.device),
-                                                         retain_graph=True, create_graph=True,
-                                                         only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
+                # 3. Compute the squares; (∇ₐδ(s, a₀))ᵀ(∇ₐδ(s, a₀)
+                dac1_2 = inner_product_last_dim(dac1, dac1)
+                dac2_2 = inner_product_last_dim(dac2, dac2)
+                assert dac1_2.size(-1) == 1 and dac2_2.size(-1) == 1
 
+                # 4. Put everything together; δ(s, a₀)² + λ(∇ₐδ(s, a₀))ᵀ(∇ₐδ(s, a₀))
+                td_loss = 0.5 * (loss_fn(q1_td_err_2, zero_targets) + loss_fn(q2_td_err_2, zero_targets))
+                ag_loss = 0.5 * (loss_fn(dac1_2, zero_targets)      + loss_fn(dac2_2, zero_targets))
+                critic_loss = td_loss + self.action_cov * ag_loss
 
+            elif self.update_order == 2:
+                pass
 
-            # Compute gradient of Q() with respect to action
-            dQa1 = torch.autograd.grad(outputs=q1, inputs=actions,
-                                                         grad_outputs=torch.ones(q1.size(), device=self.device),
-                                                         retain_graph=True, create_graph=True,
-                                                         only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
-            
-            dQa2 = torch.autograd.grad(outputs=q2, inputs=actions,
-                                                         grad_outputs=torch.ones(q2.size(), device=self.device),
-                                                         retain_graph=True, create_graph=True,
-                                                         only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
-            
-            ag_loss = dac1.unsqueeze(-2).detach() @ dQa1 + dac2.unsqueeze(-2).detach() @ dQa2
+        elif self.update_type == 'direct':
+
+            if self.update_order == 1:
+                # First order direct updates
+                # 𝔼[Δθ] = η ( δ(s, a₀)∇_θQ_θ(s, a₀) + λ(∇ₐδ(s, a₀))ᵀ ∇²_{a,θ}Q_θ(s, a₀) ).
+
+                # Compute first term; δ(s, a₀)∇_θQ_θ(s, a₀)
+                # Note: we detach δ(s, a₀) since we don't take it's gradient wrt θ in the Taylor expansion
+                term_1 = 0.5 * (loss_fn(q1_td_error.detach() * q1, zero_targets) +
+                                loss_fn(q2_td_error.detach() * q2, zero_targets))
 
 
-            
+                # 2. Compute the action-gradients; ∇ₐδ(s, a₀))
+                # Shape: [batch, actions]
+                dac1 = torch.autograd.grad(outputs=q1_td_error, inputs=actions,
+                                           grad_outputs=torch.ones(q1_td_error.size(), device=self.device),
+                                           retain_graph=True, create_graph=True,
+                                           only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
+
+                dac2 = torch.autograd.grad(outputs=q2_td_error, inputs=actions,
+                                           grad_outputs=torch.ones(q2_td_error.size(), device=self.device),
+                                           retain_graph=True, create_graph=True,
+                                           only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
 
 
+                # 3. Compute gradient of Q() with respect to action
+                dQa1 = torch.autograd.grad(outputs=q1, inputs=actions,
+                                           grad_outputs=torch.ones(q1.size(), device=self.device),
+                                           retain_graph=True, create_graph=True,
+                                           only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
 
+                dQa2 = torch.autograd.grad(outputs=q2, inputs=actions,
+                                           grad_outputs=torch.ones(q2.size(), device=self.device),
+                                           retain_graph=True, create_graph=True,
+                                           only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
 
+                term_2 = 0.5 * (loss_fn(inner_product_last_dim(dac1.detach(), dQa1), zero_targets) +
+                                loss_fn(inner_product_last_dim(dac2.detach(), dQa2), zero_targets))
 
-        critic_loss = td_loss + self.action_cov * ag_loss
+                critic_loss = term_1 + self.action_cov * term_2
 
-        # TODO add options to compute 2nd order residual updates, as well as
-        # 1st and 2nd order direct updates.
+            elif self.update_order == 2:
+                pass
 
         # Optimize the critic
         self.critic_optimizer.zero_grad()
@@ -273,5 +292,4 @@ class TD3_Taylor(nn.Module):
 
     @staticmethod
     def catastrophic_divergence(q_loss, pi_loss):
-        return False
-        # return q_loss > 1e2 or (pi_loss is not None and abs(pi_loss) > 1e5)
+        return q_loss > 1e2 or (pi_loss is not None and abs(pi_loss) > 1e5)
