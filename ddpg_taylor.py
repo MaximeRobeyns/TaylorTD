@@ -43,12 +43,11 @@ class Actor(nn.Module):
         return torch.tanh(self.layers(state))  # Bound to -1,1
 
 
+def inner_product_last_dim(A: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
+    return (A.unsqueeze(-2)@B.unsqueeze(-1)).squeeze(-1)
+
+
 class DDPG_Taylor(nn.Module):
-    """
-
-    TODO: actually update this class to implement the Taylor RL update step.
-
-    """
     def __init__(
             self,
             d_state,
@@ -69,8 +68,9 @@ class DDPG_Taylor(nn.Module):
             policy_noise=0.2,
             noise_clip=0.5,
             expl_noise=0.1,
-            tdg_error_weight=0,
-            td_error_weight=1,
+            action_cov=0.01,
+            update_type='direct',
+            update_order=1,
     ):
         super().__init__()
 
@@ -92,8 +92,9 @@ class DDPG_Taylor(nn.Module):
         self.grad_clip = grad_clip
         self.device = device
 
-        self.tdg_error_weight = tdg_error_weight
-        self.td_error_weight = td_error_weight
+        self.action_cov = action_cov
+        self.update_type = update_type
+        self.update_order = update_order
         self.step_counter = 0
 
     def setup_normalizer(self, normalizer):
@@ -146,23 +147,59 @@ class DDPG_Taylor(nn.Module):
 
         q = self.critic(states, actions)  # Q(s,a)
         q_td_error = q_target - q
-        critic_loss, standard_loss, gradient_loss = torch.tensor(0, device=self.device), torch.tensor(0, device=self.device), torch.tensor(0, device=self.device)
-        if self.td_error_weight > 0:
-            if self.value_loss == 'huber':
-                standard_loss = 0.5 * F.smooth_l1_loss(q_td_error, zero_targets)
-            elif self.value_loss == 'mse':
-                standard_loss = 0.5 * F.mse_loss(q_td_error, zero_targets)
-            critic_loss = critic_loss + self.td_error_weight * standard_loss
-        if self.tdg_error_weight > 0:
-            gradients_error_norms = torch.autograd.grad(outputs=q_td_error, inputs=actions,
-                                                        grad_outputs=torch.ones(q_td_error.size(), device=self.device),
-                                                        retain_graph=True, create_graph=True,
-                                                        only_inputs=True)[0].flatten(start_dim=1).norm(dim=1, keepdim=True)
-            if self.value_loss == 'huber':
-                gradient_loss = 0.5 * F.smooth_l1_loss(gradients_error_norms, zero_targets)
-            elif self.value_loss == 'mse':
-                gradient_loss = 0.5 * F.mse_loss(gradients_error_norms, zero_targets)
-            critic_loss = critic_loss + self.tdg_error_weight * gradient_loss
+        critic_loss, td_loss, ag_loss = torch.tensor(0, device=self.device), torch.tensor(0, device=self.device), torch.tensor(0, device=self.device)
+
+        if self.value_loss == 'huber':
+            loss_fn = F.smooth_l1_loss
+        elif self.value_loss == 'mse':
+            loss_fn = F.mse_loss
+        else:
+            raise ValueError(f'Unexpected loss: "{self.value_loss}"')
+
+
+        # Residual Vs Direct update ==========================================================
+
+        if self.update_type == 'residual':
+
+            if self.update_order == 1:
+
+                assert q_td_error.size(-1) == 1
+                q_td_error_2 = q_td_error**2
+
+                da = torch.autograd.grad(outputs=q_td_error, inputs=actions,
+                        grad_outputs=torch.ones(q_td_error.size(), device=self.device),
+                        retain_graph=True, create_graph=True, only_inputs=True)[0].flatten(start_dim=1)
+
+                da2 = inner_product_last_dim(da, da)
+                assert da2.size(-1) == 1
+
+                td_loss = 0.5 * loss_fn(q_td_error_2, zero_targets)
+                ag_loss = 0.5 * loss_fn(da2, zero_targets)
+                critic_loss = td_loss + self.action_cov * ag_loss
+
+            elif self.update_order == 2:
+                pass
+
+        elif self.update_type == 'direct':
+            if self.update_order == 1:
+                pass
+            elif self.update_order == 2:
+                pass
+
+
+        # # first variant:
+
+        # standard_loss = 0.5 * loss_fn(q_td_error, zero_targets)
+        # critic_loss = critic_loss + self.td_error_weight * standard_loss
+
+
+        # second variant:
+        # gradients_error_norms = torch.autograd.grad(outputs=q_td_error, inputs=actions,
+        #                                             grad_outputs=torch.ones(q_td_error.size(), device=self.device),
+        #                                             retain_graph=True, create_graph=True,
+        #                                             only_inputs=True)[0].flatten(start_dim=1).norm(dim=1, keepdim=True)
+        # gradient_loss = 0.5 * loss_fn(gradients_error_norms, zero_targets)
+        # critic_loss = critic_loss + self.tdg_error_weight * gradient_loss
 
         # Optimize the critic
         self.critic_optimizer.zero_grad()
@@ -187,7 +224,7 @@ class DDPG_Taylor(nn.Module):
         for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
-        return raw_next_actions[0, 0].item(), self.td_error_weight * standard_loss.item(), self.tdg_error_weight * gradient_loss.item(), actor_loss.item()
+        return raw_next_actions[0, 0].item(), td_loss.item(), ag_loss.item(), actor_loss.item()
 
     @staticmethod
     def catastrophic_divergence(q_loss, pi_loss):

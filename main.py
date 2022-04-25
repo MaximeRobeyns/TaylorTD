@@ -151,10 +151,13 @@ def policy_arch_config():
     # Parameters for TD3
     td3_policy_delay = 2
     td3_expl_noise = 0.1
-    td3_action_cov = 0.1                            # λ in Taylor RL (covariance of action points)
+    td3_action_cov = 0.1                            # lambda in Taylor RL (covariance of action points)
     td3_update_type = 'residual'                    # 'residual' or 'direct'
     td3_update_order = 1                            # 1 or 2
 
+    ddpg_action_cov = 0.1                           # lambda in Taylor RL (covariance of action points)
+    ddpg_update_type = 'residual'                   # 'residual' or 'direct'
+    ddpg_update_order = 1                           # 1 or 2
 
     # TD-Gradient parameters
     tdg_error_weight = 5.                           # weight to be used for value gradient td learning (in the paper we use alpha=1/tdg_error_weight=0.2)
@@ -283,12 +286,13 @@ def get_ddpg_agent(*, d_state, d_action, discount, device, value_tau, value_loss
 @ex.capture
 def get_ddpg_taylor_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
                           value_lr, policy_n_units, value_n_units, policy_n_layers, value_n_layers, policy_activation,
-                          value_activation, agent_grad_clip, tdg_error_weight, td_error_weight):
+                          value_activation, agent_grad_clip, ddpg_action_cov, ddpg_update_type, ddpg_update_order):
     return DDPG_Taylor(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
                 value_loss=value_loss, policy_lr=policy_lr, value_lr=value_lr,
                 policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
                 policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
-                grad_clip=agent_grad_clip, tdg_error_weight=tdg_error_weight, td_error_weight=td_error_weight)
+                grad_clip=agent_grad_clip, action_cov=ddpg_action_cov, update_type=ddpg_update_type,
+                update_order=ddpg_update_order)
 
 
 @ex.capture
