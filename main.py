@@ -151,7 +151,7 @@ def policy_arch_config():
     # Parameters for TD3
     td3_policy_delay = 2
     td3_expl_noise = 0.1
-    td3_action_cov = 0.1                            # λ in Taylor RL (covariance of action points)
+    td3_action_cov = 0.1                            #in Taylor RL (covariance of action points)
     td3_update_type = 'residual'                    # 'residual' or 'direct'
     td3_update_order = 1                            # 1 or 2
 
@@ -608,11 +608,9 @@ class MainTrainingLoop:
 
         ex.step_i = 0
         # initialise the state-space forward model
-        # Q: s × a → (μ, σ), where s' ∼ N(μ,σ²)
         # Note that this uses an ensemble network to calculate uncertainty; we
         # could replace it with an epinet.
         self.model = get_model()
-        # f: s × a × s' → r
         self.reward_model = get_reward_model()
         # Uses the 'Rectified Adam' (arxiv.org/abs/1908.03265) optimiser
         self.model_optimizer = get_model_optimizer(self.model.parameters())
@@ -659,9 +657,7 @@ class MainTrainingLoop:
 
         ex.step_i += 1
 
-        # Get the agent; π_θ.
         behavioral_agent = self.random_agent if ex.step_i <= n_warm_up_steps else self.agent
-        # Get the action, a = π_θ(s)
         with torch.no_grad():
             action = behavioral_agent.get_action(self.env_loop.state, deterministic=False).to('cpu')
         # save s
@@ -735,6 +731,12 @@ class MainTrainingLoop:
 
 @ex.automain
 def train():
+    
+    # Ensure cuda is available
+    if not torch.cuda.is_available():
+        print("No GPU")
+        exit()
+    
     # main entrypoint.
     setup()
     training = MainTrainingLoop()

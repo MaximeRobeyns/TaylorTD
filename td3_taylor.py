@@ -174,9 +174,7 @@ class TD3_Taylor(nn.Module):
         # Residual Vs Direct update ==========================================================
         #
         # Use
-        # >>> self.update_type = {'residual' | 'direct'}
         # and
-        # >>> self.update_order = {1 | 2}
         # to choose between the different update types.
 
         if self.update_type == 'residual':
@@ -184,15 +182,12 @@ class TD3_Taylor(nn.Module):
             if self.update_order == 1:
 
                 # First order residual updates
-                # 𝔼[Δθ] = η ∇_θ [ δ(s, a₀)² + λ(∇ₐδ(s, a₀))ᵀ(∇ₐδ(s, a₀)) ].
 
-                # 1. Square the td error; δ(s, a₀)² (for both critics)
                 # TD error is always scalar-valued (within each batch),
                 assert q1_td_error.size(-1) == 1 and q2_td_error.size(-1) == 1
                 q1_td_err_2 = q1_td_error**2
                 q2_td_err_2 = q2_td_error**2
 
-                # 2. Compute the action-gradients; ∇ₐδ(s, a₀))
                 # Shape: [batch, actions]
                 dac1 = torch.autograd.grad(outputs=q1_td_error, inputs=actions,
                                            grad_outputs=torch.ones(q1_td_error.size(), device=self.device),
@@ -204,12 +199,10 @@ class TD3_Taylor(nn.Module):
                                            retain_graph=True, create_graph=True,
                                            only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
 
-                # 3. Compute the squares; (∇ₐδ(s, a₀))ᵀ(∇ₐδ(s, a₀)
                 dac1_2 = inner_product_last_dim(dac1, dac1)
                 dac2_2 = inner_product_last_dim(dac2, dac2)
                 assert dac1_2.size(-1) == 1 and dac2_2.size(-1) == 1
 
-                # 4. Put everything together; δ(s, a₀)² + λ(∇ₐδ(s, a₀))ᵀ(∇ₐδ(s, a₀))
                 td_loss = 0.5 * (loss_fn(q1_td_err_2, zero_targets) + loss_fn(q2_td_err_2, zero_targets))
                 ag_loss = 0.5 * (loss_fn(dac1_2, zero_targets)      + loss_fn(dac2_2, zero_targets))
                 critic_loss = td_loss + self.action_cov * ag_loss
@@ -221,15 +214,11 @@ class TD3_Taylor(nn.Module):
 
             if self.update_order == 1:
                 # First order direct updates
-                # 𝔼[Δθ] = η ( δ(s, a₀)∇_θQ_θ(s, a₀) + λ(∇ₐδ(s, a₀))ᵀ ∇²_{a,θ}Q_θ(s, a₀) ).
-
-                # Compute first term; δ(s, a₀)∇_θQ_θ(s, a₀)
-                # Note: we detach δ(s, a₀) since we don't take it's gradient wrt θ in the Taylor expansion
-                term_1 = 0.5 * (loss_fn(q1_td_error.detach() * q1, zero_targets) +
-                                loss_fn(q2_td_error.detach() * q2, zero_targets))
+		# I would eliminate the loss_fn() terms as it adds extra terms in the gradient
+		# In MAGE, they use it because they want to explicitly min the norms
+                term_1 = q1_td_error.detach() * q1 + q2_td_error_detach() * q2
 
 
-                # 2. Compute the action-gradients; ∇ₐδ(s, a₀))
                 # Shape: [batch, actions]
                 dac1 = torch.autograd.grad(outputs=q1_td_error, inputs=actions,
                                            grad_outputs=torch.ones(q1_td_error.size(), device=self.device),
@@ -252,9 +241,10 @@ class TD3_Taylor(nn.Module):
                                            grad_outputs=torch.ones(q2.size(), device=self.device),
                                            retain_graph=True, create_graph=True,
                                            only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
-
-                term_2 = 0.5 * (loss_fn(inner_product_last_dim(dac1.detach(), dQa1), zero_targets) +
-                                loss_fn(inner_product_last_dim(dac2.detach(), dQa2), zero_targets))
+		
+		# I would eliminate the loss_fn() terms as it adds extra terms in the gradient
+		# In MAGE, they use it because they want to explicitly min the norms
+                term_2 = inner_product_last_dim(dac1.detach(), dQa1) + inner_product_last_dim(dac2.detach(), dQa2)
 
                 critic_loss = term_1 + self.action_cov * term_2
 
