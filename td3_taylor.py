@@ -205,6 +205,7 @@ class TD3_Taylor(nn.Module):
 
                 td_loss = 0.5 * (loss_fn(q1_td_err_2, zero_targets) + loss_fn(q2_td_err_2, zero_targets))
                 ag_loss = 0.5 * (loss_fn(dac1_2, zero_targets)      + loss_fn(dac2_2, zero_targets))
+               
                 critic_loss = td_loss + self.action_cov * ag_loss
 
             elif self.update_order == 2:
@@ -213,11 +214,14 @@ class TD3_Taylor(nn.Module):
         elif self.update_type == 'direct':
 
             if self.update_order == 1:
-                # First order direct updates
-		# I would eliminate the loss_fn() terms as it adds extra terms in the gradient
-		# In MAGE, they use it because they want to explicitly min the norms
-                term_1 = q1_td_error.detach() * q1 + q2_td_error_detach() * q2
 
+                # First order direct updates
+	        	# I would eliminate the loss_fn() terms as it adds extra terms in the gradient
+	        	# In MAGE, they use it because they want to explicitly min the norms
+                #term_1 = q1_td_error.detach() * (-q1) + q2_td_error.detach() * (-q2)
+                                
+                term_1 = 0.5 * (loss_fn(q1_td_error.detach() * (-q1), zero_targets) +
+                                 loss_fn(q2_td_error.detach() * (-q2), zero_targets))
 
                 # Shape: [batch, actions]
                 dac1 = torch.autograd.grad(outputs=q1_td_error, inputs=actions,
@@ -241,11 +245,14 @@ class TD3_Taylor(nn.Module):
                                            grad_outputs=torch.ones(q2.size(), device=self.device),
                                            retain_graph=True, create_graph=True,
                                            only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
-		
+                 
 		# I would eliminate the loss_fn() terms as it adds extra terms in the gradient
 		# In MAGE, they use it because they want to explicitly min the norms
-                term_2 = inner_product_last_dim(dac1.detach(), dQa1) + inner_product_last_dim(dac2.detach(), dQa2)
-
+               #term_2 = inner_product_last_dim(dac1.detach(), dQa1) + inner_product_last_dim(dac2.detach(), dQa2)
+                
+                term_2 = 0.5 * (loss_fn(inner_product_last_dim(dac1.detach(), dQa1), zero_targets) +
+                                loss_fn(inner_product_last_dim(dac2.detach(), dQa2), zero_targets))
+                
                 critic_loss = term_1 + self.action_cov * term_2
 
             elif self.update_order == 2:
