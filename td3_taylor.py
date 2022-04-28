@@ -218,10 +218,9 @@ class TD3_Taylor(nn.Module):
                 # First order direct updates
 	        	# I would eliminate the loss_fn() terms as it adds extra terms in the gradient
 	        	# In MAGE, they use it because they want to explicitly min the norms
-                #term_1 = q1_td_error.detach() * (-q1) + q2_td_error.detach() * (-q2)
                                 
-                term_1 = 0.5 * (loss_fn(q1_td_error.detach() * (-q1), zero_targets) +
-                                 loss_fn(q2_td_error.detach() * (-q2), zero_targets))
+                term_1 = 0.5 * (loss_fn(q1_td_error.detach() * q1, zero_targets) +
+                                loss_fn(q2_td_error.detach() * q2, zero_targets))
 
                 # Shape: [batch, actions]
                 dac1 = torch.autograd.grad(outputs=q1_td_error, inputs=actions,
@@ -248,7 +247,6 @@ class TD3_Taylor(nn.Module):
                  
 		# I would eliminate the loss_fn() terms as it adds extra terms in the gradient
 		# In MAGE, they use it because they want to explicitly min the norms
-               #term_2 = inner_product_last_dim(dac1.detach(), dQa1) + inner_product_last_dim(dac2.detach(), dQa2)
                 
                 term_2 = 0.5 * (loss_fn(inner_product_last_dim(dac1.detach(), dQa1), zero_targets) +
                                 loss_fn(inner_product_last_dim(dac2.detach(), dQa2), zero_targets))
