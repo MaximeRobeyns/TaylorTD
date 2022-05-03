@@ -53,3 +53,12 @@ mage:  ## mage
 
 dyna:  ## dyna
 	python main.py with env_name=GYMMB_HalfCheetah-v2 agent_alg=td3 tdg_error_weight=0. td_error_weight=1.
+
+
+kernel:  ## To setup a Jupyter kernel to run notebooks in SPItorch virtual env
+	python -m ipykernel install --user --name taylor_rl \
+		--display-name "Taylor RL (Python 3.9)"
+
+
+lab: ## To start a Jupyter Lab server
+	jupyter lab --notebook-dir=. --ip=0.0.0.0  --port 8882 # --collaborative --no-browser
