@@ -235,12 +235,35 @@ class TD3_Taylor(nn.Module):
                 sg_loss = torch.tensor(0,device=self.device)
 
         if self.update_order == 2:
-                pass
+
+                batch_s = dac1.size()[0]
+                action_s = dac1.size()[1]
+                Hess1_a = torch.zeros(batch_s,action_s,action_s, device=self.device) # The gradient dac has shape depending on action_s, which we further differentiate relative to action_s
+                Hess2_a = torch.zeros(batch_s,action_s,action_s, device=self.device) 
+
+                for i in range(action_s):
+
+                        Hess1_a[:,i,:] = torch.autograd.grad(dac1[:,i],actions,grad_outputs=torch.ones(batch_s, device=self.device),
+                                                             retain_graph=True, create_graph=True,
+                                                             only_inputs=True)[0]
+
+                        Hess2_a[:,i,:] = torch.autograd.grad(dac2[:,i],actions,grad_outputs=torch.ones(batch_s, device=self.device),
+                                                             retain_graph=True, create_graph=True,
+                                                             only_inputs=True)[0]
+                # Compute the square of the Hessian        
+                Hess1_a2 = Hess1_a @ Hess1_a
+                Hess2_a2 = Hess2_a @ Hess2_a
+               
+                # Compute the trace
+                trace_H1 = torch.sum(torch.diagonal(Hess1_a2, dim1=1,dim2=2),dim=1, keepdim=True)
+                trace_H2 = torch.sum(torch.diagonal(Hess2_a2, dim1=1,dim2=2),dim=1, keepdim=True)
+
+                aag_loss = 0.5 * (loss_fn(trace_H1, zero_targets) + loss_fn(trace_H2, zero_targets))
         else:
-               aag_loss = torch.tensor(0,device=self.device)
+                aag_loss = torch.tensor(0,device=self.device)
         
         
-        critic_loss = td_loss + self.action_cov * ag_loss + self.state_cov * sg_loss + self.gamma_H * aag_loss
+        critic_loss = td_loss + self.action_cov * ag_loss + self.state_cov * sg_loss + 2 * self.gamma_H * aag_loss
 
         # Optimize the critic
         self.critic_optimizer.zero_grad()
