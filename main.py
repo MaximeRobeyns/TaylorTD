@@ -157,6 +157,15 @@ def policy_arch_config():
     td3_state_cov =0.1
     td3_gamma_H = 0.1                               # weight on 2-order update
 
+    ddpg_policy_delay = 2
+    ddpg_expl_noise = 0.1
+    ddpg_action_cov = 0.1
+    ddpg_grad_state = False
+    ddpg_update_order = 1 
+    ddpg_state_cov =0.1
+    ddpg_gamma_H = 0.1   
+
+
 
     # TD-Gradient parameters
     tdg_error_weight = 5.                           # weight to be used for value gradient td learning (in the paper we use alpha=1/tdg_error_weight=0.2)
@@ -285,12 +294,16 @@ def get_ddpg_agent(*, d_state, d_action, discount, device, value_tau, value_loss
 @ex.capture
 def get_ddpg_taylor_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
                           value_lr, policy_n_units, value_n_units, policy_n_layers, value_n_layers, policy_activation,
-                          value_activation, agent_grad_clip, tdg_error_weight, td_error_weight):
+                          value_activation, agent_grad_clip,ddpg_policy_delay, ddpg_action_cov, ddpg_grad_state, ddpg_update_order, ddpg_state_cov, ddpg_gamma_H ,ddpg_expl_noise):
     return DDPG_Taylor(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
                 value_loss=value_loss, policy_lr=policy_lr, value_lr=value_lr,
                 policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
                 policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
-                grad_clip=agent_grad_clip, tdg_error_weight=tdg_error_weight, td_error_weight=td_error_weight)
+                grad_clip=agent_grad_clip, policy_delay=ddpg_policy_delay,
+               action_cov=ddpg_action_cov, grad_state=ddpg_grad_state, update_order=ddpg_update_order,state_cov=ddpg_state_cov,gamma_H=ddpg_gamma_H,
+               expl_noise=ddpg_expl_noise)
+
+
 
 
 @ex.capture
