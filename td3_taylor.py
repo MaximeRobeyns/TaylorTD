@@ -140,7 +140,7 @@ class TD3_Taylor(nn.Module):
             states = self.normalizer.normalize_states(states)
             next_states = self.normalizer.normalize_states(next_states)
         self.step_counter += 1
-
+        
         ## Noise-corrupted action vector:
         # Select action according to policy and add clipped noise
         # This is the standard TD3 action-selection procedure
@@ -200,8 +200,9 @@ class TD3_Taylor(nn.Module):
                                    only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
 
         # Compute magnitude of gradient of TD relative to actions
-        dac1_2 = inner_product_last_dim(dac1, dac1)
+        dac1_2 = inner_product_last_dim(dac1, dac1)# Same as calling .norm(dim=1, keepdim=True) on dac... 
         dac2_2 = inner_product_last_dim(dac2, dac2)
+
         assert dac1_2.size(-1) == 1 and dac2_2.size(-1) == 1
         
         td_loss = 0.5 * (loss_fn(q1_td_err_2, zero_targets) + loss_fn(q2_td_err_2, zero_targets))
@@ -224,7 +225,7 @@ class TD3_Taylor(nn.Module):
                                            only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
 
                 # Compute magnitude of gradient of TD relative to actions
-                dsc1_2 = inner_product_last_dim(dsc1, dsc1)
+                dsc1_2 = inner_product_last_dim(dsc1, dsc1) # Same as calling .norm(dim=1, keepdim=True) on dsc... 
                 dsc2_2 = inner_product_last_dim(dsc2, dsc2)
                 assert dsc1_2.size(-1) == 1 and dsc2_2.size(-1) == 1
                 
@@ -272,6 +273,8 @@ class TD3_Taylor(nn.Module):
         self.critic_optimizer.step()
 
         if self.step_counter % self.policy_delay == 0:
+
+            states = states.detach().clone() # do this, since no longer need Pytorch to track the gradient of states when updating the policy 
             # Compute actor loss
             q1, q2 = self.critic(states, self.actor(states))  # originally in TD3 we had here q1 only
             q_min = torch.min(q1, q2)

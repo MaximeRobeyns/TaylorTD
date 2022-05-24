@@ -60,7 +60,8 @@ def main_config():
     n_warm_up_steps = 1000                          # number of steps on real MDP to populate the initial buffer, actions selected by random agent
 
     normalize_data = True                           # normalize states, actions, next states to zero mean and unit variance (both for model training and policy training)
-
+ 
+    seed = 891 # REMOVE, for testing purpose only!
 
 # noinspection PyUnusedLocal
 @ex.config
@@ -152,7 +153,6 @@ def policy_arch_config():
     td3_policy_delay = 2
     td3_expl_noise = 0.1
     td3_action_cov = 0.1                            #in Taylor RL (covariance of action points)
-    td3_grad_state = False                          # Include gradiet of TD-error relative to state
     td3_update_order = 1                            # 1 or 2
     td3_state_cov =0.1
     td3_gamma_H = 0.1                               # weight on 2-order update
@@ -160,11 +160,12 @@ def policy_arch_config():
     ddpg_policy_delay = 2
     ddpg_expl_noise = 0.1
     ddpg_action_cov = 0.1
-    ddpg_grad_state = False
     ddpg_update_order = 1 
     ddpg_state_cov =0.1
     ddpg_gamma_H = 0.1   
 
+    
+    grad_state = False                          # Include gradiet of TD-error relative to state
 
 
     # TD-Gradient parameters
@@ -216,7 +217,7 @@ def setup(seed, dump_dir, omp_num_threads, print_config, _run):
 
 
 @ex.capture
-def get_env(env_name, record):
+def get_env(env_name, record, seed): # REMOVE seed from argument, only added from testing purposes
     """Setup the Gym environment"""
     env = gym.make(env_name)
     # clips actions before calling step.
@@ -228,13 +229,18 @@ def get_env(env_name, record):
     env = MuJoCoCloseFixWrapper(env)
     if record:
         env = RecordedEnv(env)
+    
+    # REMOVE: Fixed all the seeds ------------
 
-    env.seed(np.random.randint(np.iinfo(np.uint32).max))
+    #env.seed(np.random.randint(np.iinfo(np.uint32).max))
+    env.seed(seed)
+
     if hasattr(env.action_space, 'seed'):  # Only for more recent gym
-        env.action_space.seed(np.random.randint(np.iinfo(np.uint32).max))
+    #    env.action_space.seed(np.random.randint(np.iinfo(np.uint32).max))
+        env.action_space.seed(seed)
     if hasattr(env.observation_space, 'seed'):  # Only for more recent gym
-        env.observation_space.seed(np.random.randint(np.iinfo(np.uint32).max))
-
+    #    env.observation_space.seed(np.random.randint(np.iinfo(np.uint32).max))
+        env.observation_space.seed(seed)
     return env
 
 
@@ -271,14 +277,14 @@ def get_td3_agent(*, d_state, d_action, discount, device, value_tau, value_loss,
 @ex.capture
 def get_td3_taylor_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
                   value_lr, policy_n_units, value_n_units, policy_n_layers, value_n_layers, policy_activation,
-                  value_activation, agent_grad_clip, td3_policy_delay, td3_action_cov, td3_grad_state, td3_update_order,td3_state_cov,td3_gamma_H,
+                  value_activation, agent_grad_clip, td3_policy_delay, td3_action_cov, grad_state, td3_update_order,td3_state_cov,td3_gamma_H,
                   td3_expl_noise):
     return TD3_Taylor(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
                value_loss=value_loss, policy_lr=policy_lr, value_lr=value_lr,
                policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
                policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
                grad_clip=agent_grad_clip, policy_delay=td3_policy_delay,
-               action_cov=td3_action_cov, grad_state=td3_grad_state, update_order=td3_update_order,state_cov=td3_state_cov,gamma_H=td3_gamma_H,
+               action_cov=td3_action_cov, grad_state=grad_state, update_order=td3_update_order,state_cov=td3_state_cov,gamma_H=td3_gamma_H,
                expl_noise=td3_expl_noise)
 
 @ex.capture
@@ -294,13 +300,13 @@ def get_ddpg_agent(*, d_state, d_action, discount, device, value_tau, value_loss
 @ex.capture
 def get_ddpg_taylor_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
                           value_lr, policy_n_units, value_n_units, policy_n_layers, value_n_layers, policy_activation,
-                          value_activation, agent_grad_clip,ddpg_policy_delay, ddpg_action_cov, ddpg_grad_state, ddpg_update_order, ddpg_state_cov, ddpg_gamma_H ,ddpg_expl_noise):
+                          value_activation, agent_grad_clip,ddpg_policy_delay, ddpg_action_cov, grad_state, ddpg_update_order, ddpg_state_cov, ddpg_gamma_H ,ddpg_expl_noise):
     return DDPG_Taylor(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
                 value_loss=value_loss, policy_lr=policy_lr, value_lr=value_lr,
                 policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
                 policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
                 grad_clip=agent_grad_clip, policy_delay=ddpg_policy_delay,
-               action_cov=ddpg_action_cov, grad_state=ddpg_grad_state, update_order=ddpg_update_order,state_cov=ddpg_state_cov,gamma_H=ddpg_gamma_H,
+               action_cov=ddpg_action_cov, grad_state=grad_state, update_order=ddpg_update_order,state_cov=ddpg_state_cov,gamma_H=ddpg_gamma_H,
                expl_noise=ddpg_expl_noise)
 
 
@@ -344,9 +350,9 @@ def get_reward_model(d_action, d_state, reward_n_units, reward_n_layers, reward_
     return model
 
 
-@ex.capture
-def get_imagination(model, initial_states, *, model_sampling_type, policy_actors):
-    return SingleStepImagination(model, initial_states, n_actors=policy_actors, model_sampling_type=model_sampling_type)
+@ex.capture # Return the function (i.e. SingleStepImagination) to generate (imagined) one-step transitions based on the model of environment
+def get_imagination(model, initial_states, *, model_sampling_type, policy_actors,grad_state):
+        return SingleStepImagination(model, initial_states, n_actors=policy_actors, model_sampling_type=model_sampling_type, grad_state=grad_state)
 
 
 @ex.capture
@@ -370,7 +376,9 @@ def get_buffer(d_state, d_action, n_total_steps, normalize_data, device):
 
 """ Agent Training """
 
-
+# I don't think this class is used; Mage, taylor and Dyna-TD3, all rely on transition provided by the model (imaginary) which are
+# computed by the class below ImaginationTransitionsProvider, this class should be used for standard td3 methods, which rely on
+# buffer transitions rather than imaginary ones
 class BufferTransitionsProvider:
     def __init__(self, buffer, task, is_done, device, policy_actors):
         self.buffer = buffer
@@ -383,12 +391,16 @@ class BufferTransitionsProvider:
         states, actions, next_states, _ = self.buffer.view()
         idx = torch.randint(len(self.buffer), size=[self.policy_actors])
         states, actions, next_states = [x[idx].to(self.device) for x in [states, actions, next_states]]
+        print('Buffer \n')
+        print(states)
+        exit()
         rewards = self.task(states, actions, next_states)
         dones = self.is_done(next_states)
         logps = torch.ones(actions.shape[0], device=self.device) * np.inf
         return states, actions, logps, next_states, rewards, dones
 
-
+# This class relies on input object imagination to generate an imaginary(predicted) transition (i.e. based on the model)
+# it also relies on input task to compute the true reward give the transition and the task
 class ImaginationTransitionsProvider:
     def __init__(self, imagination, task, is_done):
         self.imagination = imagination
@@ -398,7 +410,7 @@ class ImaginationTransitionsProvider:
 
     def get_training_transitions(self, agent):
         states, actions, logps, next_states = self.imagination.many_steps(agent)
-        rewards = self.task(states, actions, next_states)
+        rewards = self.task(states, actions, next_states)  # Here computes the task reward accessing the true reward function for the task
         dones = self.is_done(next_states)
         return states, actions, logps, next_states, rewards, dones
 
