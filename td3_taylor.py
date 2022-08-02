@@ -273,8 +273,11 @@ class TD3_Taylor(nn.Module):
         self.critic_optimizer.step()
 
         if self.step_counter % self.policy_delay == 0:
+            
+            # do this, since no longer need Pytorch to track the gradient of states when updating the policy 
+            if self.grad_state:
+                    states = states.detach().clone() # do this, since no longer need Pytorch to track the gradient of states when updating the policy 
 
-            states = states.detach().clone() # do this, since no longer need Pytorch to track the gradient of states when updating the policy 
             # Compute actor loss
             q1, q2 = self.critic(states, self.actor(states))  # originally in TD3 we had here q1 only
             q_min = torch.min(q1, q2)
