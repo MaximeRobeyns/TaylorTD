@@ -767,8 +767,8 @@ def train():
 
     # dot-access dict subclass.
     res = DotMap(done=False)
-    while not res.done:
-        res = training.train()
+    while not res.done: # keeps calling train() until done, which happens when ex.step_i > n_total_steps
+        res = training.train() # at each call ex.step_i is increased of 1, inside train() all the experience sampling and updates take place
 
     training.stop()
 
