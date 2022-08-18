@@ -175,43 +175,48 @@ class TD3_Taylor(nn.Module):
             loss_fn = F.mse_loss
         else:
             raise ValueError(f'Unexpected loss: "{self.value_loss}"')
-
-        # Peform different types of updates ==========================================================
-        # First compute the square of TD-error and the gradient of the TD-error, since these two terms are needed for all types of update
-        # Then include option to compute gradient of TD-error relative to the state
-        # Finally, add option to go higher order for both types of TD updates (i.e. relative to actions and states)
-
-        # Compute saure of TD-error
-        # TD error is always scalar-valued (within each batch),
-        assert q1_td_error.size(-1) == 1 and q2_td_error.size(-1) == 1
-        q1_td_err_2 = q1_td_error**2
-        q2_td_err_2 = q2_td_error**2
-
-        # Compute gradient of TD-error relative to actions
-        # Shape: [batch, actions]
-        dac1 = torch.autograd.grad(outputs=q1_td_error, inputs=actions,
-                                   grad_outputs=torch.ones(q1_td_error.size(), device=self.device),
-                                   retain_graph=True, create_graph=True,
-                                   only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
-
-        dac2 = torch.autograd.grad(outputs=q2_td_error, inputs=actions,
-                                   grad_outputs=torch.ones(q2_td_error.size(), device=self.device),
-                                   retain_graph=True, create_graph=True,
-                                   only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
-
-        # Compute magnitude of gradient of TD relative to actions
-        dac1_2 = inner_product_last_dim(dac1, dac1)# Same as calling .norm(dim=1, keepdim=True) on dac... 
-        dac2_2 = inner_product_last_dim(dac2, dac2)
-
-        assert dac1_2.size(-1) == 1 and dac2_2.size(-1) == 1
         
-        td_loss = 0.5 * (loss_fn(q1_td_err_2, zero_targets) + loss_fn(q2_td_err_2, zero_targets))
-        ag_loss = 0.5 * (loss_fn(dac1_2, zero_targets)      + loss_fn(dac2_2, zero_targets))
+        # In practice below implements the direct TD-update since have fixed target and each term is squared by loss_fn
+        term_1 = 0.5 * (loss_fn(q1_td_error, zero_targets) + loss_fn(q2_td_error, zero_targets))        
+        
+        # Initialise higher order terms to zero
+        term_2 = torch.tensor(0,device=self.device)
+        term_3 = torch.tensor(0,device=self.device)
+        state_term = torch.tensor(0,device=self.device)
+
+
+
+        if self.update_order >= 1: # i.e. execute for both the first and second order update
+
+                dac1 = torch.autograd.grad(outputs=q1_td_error, inputs=actions,
+                                           grad_outputs=torch.ones(q1_td_error.size(), device=self.device),
+                                           retain_graph=True, create_graph=True,
+                                           only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
+
+                dac2 = torch.autograd.grad(outputs=q2_td_error, inputs=actions,
+                                           grad_outputs=torch.ones(q2_td_error.size(), device=self.device),
+                                           retain_graph=True, create_graph=True,
+                                           only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
+
+
+                # 3. Compute gradient of Q() with respect to action
+                dQa1 = torch.autograd.grad(outputs=q1, inputs=actions,
+                                           grad_outputs=torch.ones(q1.size(), device=self.device),
+                                           retain_graph=True, create_graph=True,
+                                           only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
+
+                dQa2 = torch.autograd.grad(outputs=q2, inputs=actions,
+                                           grad_outputs=torch.ones(q2.size(), device=self.device),
+                                           retain_graph=True, create_graph=True,
+                                           only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
+                 
+                # KEY: need to change its sign as passed to  gradient descent not ascent:
+                term_2 = -1 * ( torch.mean(inner_product_last_dim(dac1.detach(),dQa1)) + torch.mean(inner_product_last_dim(dac2.detach(),dQa2)))
 
         # Compute gradient of TD relatice to the state
-        # NOTE: this cannot work since states doesn't requires gradient, need to wrap it around a require_grad tensor
-        # but need to do it before the action policy and predicted next state is computed, so that can differentiate
-        # through them when compute grad of TD-error relative to the state
+        # NOTE: for this to work, had to change the SingleStepImagination class and add an option to require the gradient of the state before the actions are computed
+        # because when differentiate relative to the state, the action at the current state is a function of it
+        # NOTE: Need to chenge this into a direct update! (at the moment is for the residual update)
         if self.grad_state:
 
                 dsc1 = torch.autograd.grad(outputs=q1_td_error, inputs=states,
@@ -229,12 +234,10 @@ class TD3_Taylor(nn.Module):
                 dsc2_2 = inner_product_last_dim(dsc2, dsc2)
                 assert dsc1_2.size(-1) == 1 and dsc2_2.size(-1) == 1
                 
-                sg_loss = 0.5 * (loss_fn(dsc1_2, zero_targets)      + loss_fn(dsc2_2, zero_targets))
+                state_term = 0.5 * (loss_fn(dsc1_2, zero_targets)      + loss_fn(dsc2_2, zero_targets))
 
     
-        else:
-                sg_loss = torch.tensor(0,device=self.device)
-
+        # NOTE: Need to change this into a direct 2nd order update, at the moment it is for the residual
         if self.update_order == 2:
 
                 batch_s = dac1.size()[0]
@@ -259,12 +262,10 @@ class TD3_Taylor(nn.Module):
                 trace_H1 = torch.sum(torch.diagonal(Hess1_a2, dim1=1,dim2=2),dim=1, keepdim=True)
                 trace_H2 = torch.sum(torch.diagonal(Hess2_a2, dim1=1,dim2=2),dim=1, keepdim=True)
 
-                aag_loss = 0.5 * (loss_fn(trace_H1, zero_targets) + loss_fn(trace_H2, zero_targets))
-        else:
-                aag_loss = torch.tensor(0,device=self.device)
+                term_3 = 0.5 * (loss_fn(trace_H1, zero_targets) + loss_fn(trace_H2, zero_targets))
+               
         
-        
-        critic_loss = td_loss + self.action_cov * ag_loss + self.state_cov * sg_loss + 2 * self.gamma_H * aag_loss
+        critic_loss = term_1 + self.action_cov * term_2 + self.state_cov * state_term + 2 * self.gamma_H * term_3
 
         # Optimize the critic
         self.critic_optimizer.zero_grad()

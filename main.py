@@ -61,7 +61,7 @@ def main_config():
 
     normalize_data = True                           # normalize states, actions, next states to zero mean and unit variance (both for model training and policy training)
  
-    seed = 891 # REMOVE, for testing purpose only!
+#    seed = 891 # REMOVE, for testing purpose only!
 
 # noinspection PyUnusedLocal
 @ex.config
@@ -152,7 +152,7 @@ def policy_arch_config():
     # Parameters for TD3
     td3_policy_delay = 2
     td3_expl_noise = 0.1
-    td3_action_cov = 5                            #in Taylor RL (covariance of action points) - 5 works really well (equivalent value to MAGE)
+    td3_action_cov = 0.25                            #in Taylor RL (covariance of action points) - 5 works really well (equivalent value to MAGE)
     td3_update_order = 1                            # 1 or 2
     td3_state_cov =0.1
     td3_gamma_H = 0.1                               # weight on 2-order update
@@ -232,15 +232,13 @@ def get_env(env_name, record, seed): # REMOVE seed from argument, only added fr
     
     # REMOVE: Fixed all the seeds ------------
 
-    #env.seed(np.random.randint(np.iinfo(np.uint32).max))
-    env.seed(seed)
+    env.seed(np.random.randint(np.iinfo(np.uint32).max))
+    #env.seed(seed)
 
     if hasattr(env.action_space, 'seed'):  # Only for more recent gym
         env.action_space.seed(np.random.randint(np.iinfo(np.uint32).max))
-    #    env.action_space.seed(seed)
     if hasattr(env.observation_space, 'seed'):  # Only for more recent gym
         env.observation_space.seed(np.random.randint(np.iinfo(np.uint32).max))
-    #    env.observation_space.seed(seed)
     return env
 
 
