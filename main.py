@@ -156,7 +156,8 @@ def policy_arch_config():
     td3_update_order = 1                            # 1 or 2
     td3_state_cov =0.1
     td3_gamma_H = 0.1                               # weight on 2-order update
-
+    
+    # Parameters for DDPG
     ddpg_policy_delay = 2
     ddpg_expl_noise = 0.1
     ddpg_action_cov = 0.1

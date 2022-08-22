@@ -180,14 +180,15 @@ class TD3_Taylor(nn.Module):
         term_1 = 0.5 * (loss_fn(q1_td_error, zero_targets) + loss_fn(q2_td_error, zero_targets))        
         
         # Initialise higher order terms to zero
-        term_2 = torch.tensor(0,device=self.device)
+        action_term1 = torch.tensor(0,device=self.device)
         term_3 = torch.tensor(0,device=self.device)
-        state_term = torch.tensor(0,device=self.device)
+        state_term1 = torch.tensor(0,device=self.device)
 
 
 
         if self.update_order >= 1: # i.e. execute for both the first and second order update
-
+                
+                # Compute the gradient of the TD-error with respect to the action
                 dac1 = torch.autograd.grad(outputs=q1_td_error, inputs=actions,
                                            grad_outputs=torch.ones(q1_td_error.size(), device=self.device),
                                            retain_graph=True, create_graph=True,
@@ -199,7 +200,7 @@ class TD3_Taylor(nn.Module):
                                            only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
 
 
-                # 3. Compute gradient of Q() with respect to action
+                # Compute gradient of Q() with respect to action
                 dQa1 = torch.autograd.grad(outputs=q1, inputs=actions,
                                            grad_outputs=torch.ones(q1.size(), device=self.device),
                                            retain_graph=True, create_graph=True,
@@ -211,7 +212,7 @@ class TD3_Taylor(nn.Module):
                                            only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
                  
                 # KEY: need to change its sign as passed to  gradient descent not ascent:
-                term_2 = -1 * ( torch.mean(inner_product_last_dim(dac1.detach(),dQa1)) + torch.mean(inner_product_last_dim(dac2.detach(),dQa2)))
+                action_term1 = -1 * ( torch.mean(inner_product_last_dim(dac1.detach(),dQa1)) + torch.mean(inner_product_last_dim(dac2.detach(),dQa2)))
 
         # Compute gradient of TD relatice to the state
         # NOTE: for this to work, had to change the SingleStepImagination class and add an option to require the gradient of the state before the actions are computed
@@ -219,6 +220,7 @@ class TD3_Taylor(nn.Module):
         # NOTE: Need to chenge this into a direct update! (at the moment is for the residual update)
         if self.grad_state:
 
+                # Compute the gradient of the TD-error with respect to the state 
                 dsc1 = torch.autograd.grad(outputs=q1_td_error, inputs=states,
                                            grad_outputs=torch.ones(q1_td_error.size(), device=self.device),
                                            retain_graph=True, create_graph=True,
@@ -229,12 +231,20 @@ class TD3_Taylor(nn.Module):
                                            retain_graph=True, create_graph=True,
                                            only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
 
-                # Compute magnitude of gradient of TD relative to actions
-                dsc1_2 = inner_product_last_dim(dsc1, dsc1) # Same as calling .norm(dim=1, keepdim=True) on dsc... 
-                dsc2_2 = inner_product_last_dim(dsc2, dsc2)
-                assert dsc1_2.size(-1) == 1 and dsc2_2.size(-1) == 1
-                
-                state_term = 0.5 * (loss_fn(dsc1_2, zero_targets)      + loss_fn(dsc2_2, zero_targets))
+                # Compute gradient of Q() with respect to state
+                dQs1 = torch.autograd.grad(outputs=q1, inputs=states,
+                                           grad_outputs=torch.ones(q1.size(), device=self.device),
+                                           retain_graph=True, create_graph=True,
+                                           only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
+
+                dQs2 = torch.autograd.grad(outputs=q2, inputs=states,
+                                           grad_outputs=torch.ones(q2.size(), device=self.device),
+                                           retain_graph=True, create_graph=True,
+                                           only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
+                 
+                # KEY: need to change its sign as passed to  gradient descent not ascent:
+                state_term1 = -1 * ( torch.mean(inner_product_last_dim(dsc1.detach(),dQs1)) + torch.mean(inner_product_last_dim(dsc2.detach(),dQs2)))
+
 
     
         # NOTE: Need to change this into a direct 2nd order update, at the moment it is for the residual
@@ -265,7 +275,7 @@ class TD3_Taylor(nn.Module):
                 term_3 = 0.5 * (loss_fn(trace_H1, zero_targets) + loss_fn(trace_H2, zero_targets))
                
         
-        critic_loss = term_1 + self.action_cov * term_2 + self.state_cov * state_term + 2 * self.gamma_H * term_3
+        critic_loss = term_1 + self.action_cov * action_term1 + self.state_cov * state_term1 + 2 * self.gamma_H * term_3
 
         # Optimize the critic
         self.critic_optimizer.zero_grad()
