@@ -37,7 +37,7 @@ class ActionValueFunction(nn.Module):
 def inner_product_last_dim(A: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
     return (A.unsqueeze(-2)@B.unsqueeze(-1)).squeeze(-1)
 
-class DDPG_Taylor(nn.Module):
+class Residual_MAGE(nn.Module):
     def __init__(
             self,
             d_state,
@@ -91,8 +91,8 @@ class DDPG_Taylor(nn.Module):
         self.grad_clip = grad_clip
         self.device = device
         self.last_actor_loss = 0
-       self.step_counter = 0
-       self.tdg_error_weight = tdg_error_weight
+        self.step_counter = 0
+        self.tdg_error_weight = tdg_error_weight
 
 
     def setup_normalizer(self, normalizer):

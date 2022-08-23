@@ -35,7 +35,7 @@ from reward_model import RewardModel
 from td3 import TD3
 from td3_taylor import TD3_Taylor
 from ddpg import DDPG
-from ddpg_taylor import Residual_MAGE
+from Residual_MAGE import Residual_MAGE
 from wrappers import BoundedActionsEnv, IsDoneEnv, MuJoCoCloseFixWrapper, RecordedEnv
 from buffer import Buffer
 from models import Model
@@ -291,13 +291,13 @@ def get_ddpg_agent(*, d_state, d_action, discount, device, value_tau, value_loss
 @ex.capture
 def get_residual_Mage_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
                           value_lr, policy_n_units, value_n_units, policy_n_layers, value_n_layers, policy_activation,
-                          value_activation, agent_grad_clip,ddpg_policy_delay, ddpg_expl_noise , tdg_error_weight):
+                          value_activation, agent_grad_clip,td3_policy_delay, td3_expl_noise , tdg_error_weight):
     return Residual_MAGE(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
                 value_loss=value_loss, policy_lr=policy_lr, value_lr=value_lr,
                 policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
                 policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
                 grad_clip=agent_grad_clip, policy_delay=td3_policy_delay,
-               expl_noise=ddpg_expl_noise, tdg_error_weight=tdg_error_weight)
+               expl_noise=td3_expl_noise, tdg_error_weight=tdg_error_weight)
 
 
 
