@@ -35,7 +35,7 @@ from reward_model import RewardModel
 from td3 import TD3
 from td3_taylor import TD3_Taylor
 from ddpg import DDPG
-from ddpg_taylor import DDPG_Taylor
+from ddpg_taylor import Residual_MAGE
 from wrappers import BoundedActionsEnv, IsDoneEnv, MuJoCoCloseFixWrapper, RecordedEnv
 from buffer import Buffer
 from models import Model
@@ -157,14 +157,6 @@ def policy_arch_config():
     td3_state_cov =0.1
     td3_gamma_H = 0.1                               # weight on 2-order update
     
-    # Parameters for DDPG
-    ddpg_policy_delay = 2
-    ddpg_expl_noise = 0.1
-    ddpg_action_cov = 0.1
-    ddpg_update_order = 1 
-    ddpg_state_cov =0.1
-    ddpg_gamma_H = 0.1   
-
     
     grad_state = False                          # Include gradiet of TD-error relative to state
 
@@ -256,8 +248,8 @@ def get_agent(mode, *, agent_alg):
     if agent_alg == 'ddpg':
         return get_ddpg_agent()
 
-    if agent_alg == 'ddpg_taylor':
-        return get_ddpg_taylor_agent()
+    if agent_alg == 'residual_mage':
+        return get_residual_Mage_agent()
 
     raise ValueError(f'Unknown agent alg {agent_alg}')
 
@@ -297,16 +289,15 @@ def get_ddpg_agent(*, d_state, d_action, discount, device, value_tau, value_loss
                 grad_clip=agent_grad_clip, tdg_error_weight=tdg_error_weight, td_error_weight=td_error_weight)
 
 @ex.capture
-def get_ddpg_taylor_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
+def get_residual_Mage_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
                           value_lr, policy_n_units, value_n_units, policy_n_layers, value_n_layers, policy_activation,
-                          value_activation, agent_grad_clip,ddpg_policy_delay, ddpg_action_cov, grad_state, ddpg_update_order, ddpg_state_cov, ddpg_gamma_H ,ddpg_expl_noise):
-    return DDPG_Taylor(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
+                          value_activation, agent_grad_clip,ddpg_policy_delay, ddpg_expl_noise , tdg_error_weight):
+    return Residual_MAGE(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
                 value_loss=value_loss, policy_lr=policy_lr, value_lr=value_lr,
                 policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
                 policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
-                grad_clip=agent_grad_clip, policy_delay=ddpg_policy_delay,
-               action_cov=ddpg_action_cov, grad_state=grad_state, update_order=ddpg_update_order,state_cov=ddpg_state_cov,gamma_H=ddpg_gamma_H,
-               expl_noise=ddpg_expl_noise)
+                grad_clip=agent_grad_clip, policy_delay=td3_policy_delay,
+               expl_noise=ddpg_expl_noise, tdg_error_weight=tdg_error_weight)
 
 
 
@@ -405,7 +396,7 @@ class ImaginationTransitionsProvider:
         self.imagination.reset()
 
     def get_training_transitions(self, agent):
-        states, actions, logps, next_states = self.imagination.many_steps(agent)
+        states, actions, logps, next_states = self.imagination.many_steps(agent) # This returns a batch of initial states and the corresponding "imagined" next states with the actions
         rewards = self.task(states, actions, next_states)  # Here computes the task reward accessing the true reward function for the task
         dones = self.is_done(next_states)
         return states, actions, logps, next_states, rewards, dones
@@ -413,8 +404,8 @@ class ImaginationTransitionsProvider:
 
 @ex.capture
 def get_training_data_provider(model, buffer, is_done, task):
-    initial_states, _, _, _ = buffer.view()
-    imagination = get_imagination(model, initial_states)
+    initial_states, _, _, _ = buffer.view() # This returns all inital states so far in the buffer
+    imagination = get_imagination(model, initial_states) # Creates an "imagination" obj needed to generate next states through the ImaginationTransitionsProvider 
     return ImaginationTransitionsProvider(imagination=imagination, task=task, is_done=is_done)
 
 
@@ -426,7 +417,7 @@ def train_agent(agent, model, reward_model, buffer, task, task_name, is_done, mo
 
     q_loss, pi_loss = np.nan, np.nan
     for img_step_i in range(1, policy_training_n_iters + 1):
-        states, actions, logps, next_states, rewards, dones = data_provider.get_training_transitions(agent)
+        states, actions, logps, next_states, rewards, dones = data_provider.get_training_transitions(agent) # Key method call where get all the RL variables (s,a,r,s',d)
         if train_reward:
             rewards = reward_model(states, actions, next_states).squeeze(1)
 
@@ -434,7 +425,7 @@ def train_agent(agent, model, reward_model, buffer, task, task_name, is_done, mo
             continue
 
         for img_update_i in range(1, policy_training_n_updates_per_iter + 1):
-            raw_action, q_loss, q_grad_loss, pi_loss = agent.update(states, actions, logps, rewards, next_states, masks=~dones)
+            raw_action, q_loss, q_grad_loss, pi_loss = agent.update(states, actions, logps, rewards, next_states, masks=~dones) # Key method call to the critic and actor update
             # This is rare but can still happen
             if agent.catastrophic_divergence(q_loss, pi_loss):
                 logger.info("Catastrophic divergence detected. Agent reset.")
