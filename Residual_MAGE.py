@@ -146,7 +146,7 @@ class Residual_MAGE(nn.Module):
         
         # compute the target Q value depending on the update
         
-        next_Q = self.critict(next_states, next_actions) # both next_s and next_a carry a gradient, which should relate them to action
+        next_Q = self.critic(next_states, next_actions) # both next_s and next_a carry a gradient, which should relate them to action
         q_target = rewards.unsqueeze(1) + self.discount * masks.float().unsqueeze(1) * next_Q
         zero_targets = torch.zeros_like(q_target, device=self.device)
 
@@ -210,7 +210,7 @@ class Residual_MAGE(nn.Module):
             for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
                 target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
-        return raw_next_actions[0, 0].item(), td_loss.item(), self.action_cov * ag_loss.item(), self.last_actor_loss
+        return raw_next_actions[0, 0].item(), standard_loss.item(), self.tdg_error_weight * gradient_loss.item(), self.last_actor_loss
 
     @staticmethod
     def catastrophic_divergence(q_loss, pi_loss):
