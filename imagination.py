@@ -20,11 +20,12 @@ class SingleStepImagination:
     def many_steps(self, agent):
         idx = torch.randint(self.initial_states.shape[0], size=[self.n_actors])
         states = self.initial_states[idx].to(self.device)
+
         actions, logps = agent.get_action_with_logp(states)
 
         # NOTE: Add the state.require_grad after computing the actions so that the action remains fixed when differentiating relative to the state 
         if self.grad_state:
-                states.requires_grad_(True)
+                states = states.detach().requires_grad_() # create an alias of states which share data, but requires_grad, in this way we are not changing the grad flag of data stored in the buffer
         
         next_states = self.model.sample(states, actions, self.model_sampling_type)
         return states, actions, logps, next_states
