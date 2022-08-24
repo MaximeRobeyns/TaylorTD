@@ -60,7 +60,8 @@ def main_config():
     n_warm_up_steps = 1000                          # number of steps on real MDP to populate the initial buffer, actions selected by random agent
 
     normalize_data = True                           # normalize states, actions, next states to zero mean and unit variance (both for model training and policy training)
- 
+    run_type = 'test' 
+    run_number = 88
 #    seed = 891 # REMOVE, for testing purpose only!
 
 # noinspection PyUnusedLocal
@@ -169,7 +170,7 @@ def policy_arch_config():
 
 # noinspection PyUnusedLocal
 @ex.config
-def infra_config():
+def infra_config(env_name,run_type,run_number):
     use_cuda = True                                 # if true use CUDA
     gpu_id = 0                                      # ID of GPU to use (by default use GPU 0)
     print_config = True                             # Set False if you don't want that (e.g. for regression tests)
@@ -181,7 +182,8 @@ def infra_config():
     self_dir = os.path.dirname(os.path.abspath(__file__))
     dump_dir = '__default__'                        # Set dump_dir=None if you don't want to be create dump_dir
     if dump_dir == '__default__':
-        dump_dir = os.path.join(self_dir, 'logs', f'{datetime.now().strftime("%Y%m%d%H%M%S")}_{os.getpid()}')
+    #    dump_dir = os.path.join(self_dir, 'logs', f'{datetime.now().strftime("%Y%m%d%H%M%S")}_{os.getpid()}')
+        dump_dir = os.path.join(self_dir, 'results',f'{env_name}',f'{run_type}_{run_number}')
     if dump_dir is not None:
         os.makedirs(dump_dir, exist_ok=True)
     neptune_project = None                          # e.g. yourlogin/sandbox
