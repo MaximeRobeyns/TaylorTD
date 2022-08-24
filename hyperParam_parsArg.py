@@ -22,6 +22,7 @@ parser.add_argument('--agent_alg', '-a', type=str, default='td3_taylor')
 parser.add_argument('--state_cov', '-sc', type=bool, default=False)
 parser.add_argument('--action_cov', '-ac', type=bool, default=False)
 parser.add_argument('--n_steps',  type=int, default=20000)
+parser.add_argument('--run_type', type=str, default='train')
 
 # split input args on --cmd
 cmd_idx = sys.argv.index('--cmd')
@@ -53,7 +54,9 @@ if args.action_cov:
     action_cov_range = torch.linspace(0.000001,0.0001,5)
 else:
     action_cov_range = [0.25]
-    
+
+
+counter = 0
 seeds = [1] # Add random seeds    
 # MISSING: need to add the directory    
 for s in seeds:
@@ -62,4 +65,5 @@ for s in seeds:
 
         for ac in action_cov_range:
 
-            print(cmd,' with env_name=GYMMB_'+args.env_name,'agent_alg='+args.agent_alg,f'td3_action_cov={ac}',f'td3_state_cov={sc}',f'n_total_steps={args.n_steps}', f'seed={s}')
+            print(cmd,' with env_name=GYMMB_'+args.env_name,'agent_alg='+args.agent_alg,f'td3_action_cov={ac}',f'td3_state_cov={sc}',f'n_total_steps={args.n_steps}', f'seed={s}',f'run_type='+args.run_type,f'run_number={counter}')
+            counter+=1

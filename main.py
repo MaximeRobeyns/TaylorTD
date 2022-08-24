@@ -170,7 +170,7 @@ def policy_arch_config():
 
 # noinspection PyUnusedLocal
 @ex.config
-def infra_config(env_name,run_type,run_number):
+def infra_config(env_name,agent_alg,run_type,run_number):
     use_cuda = True                                 # if true use CUDA
     gpu_id = 0                                      # ID of GPU to use (by default use GPU 0)
     print_config = True                             # Set False if you don't want that (e.g. for regression tests)
@@ -183,7 +183,7 @@ def infra_config(env_name,run_type,run_number):
     dump_dir = '__default__'                        # Set dump_dir=None if you don't want to be create dump_dir
     if dump_dir == '__default__':
     #    dump_dir = os.path.join(self_dir, 'logs', f'{datetime.now().strftime("%Y%m%d%H%M%S")}_{os.getpid()}')
-        dump_dir = os.path.join(self_dir, 'results',f'{env_name}',f'{run_type}',f'{run_number}') # Add this to save file in specif directory
+        dump_dir = os.path.join(self_dir, 'results',f'{env_name}',f'{agent_alg}',f'{run_type}',f'{run_number}') # Add this to save file in specif directory
     if dump_dir is not None:
         os.makedirs(dump_dir, exist_ok=True)
     neptune_project = None                          # e.g. yourlogin/sandbox
