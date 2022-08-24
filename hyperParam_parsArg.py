@@ -43,7 +43,7 @@ print(f"#SBATCH --output {args.output}"  )
 print(f"#SBATCH --exclude={args.exclude}"  )
 
 print('')
-print("cd", "/home/px19783/Two_joint_arm")
+print("cd", "/user/work/px19783/code_repository/RL_project/TaylorRL")
 
 if args.state_cov:
     state_cov_range = torch.linspace(0.000001,0.0001,5)
