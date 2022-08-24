@@ -21,6 +21,8 @@ parser.add_argument('--env-name', '-e', type=str)
 parser.add_argument('--agent_alg', '-a', type=str, default='td3_taylor')
 parser.add_argument('--state_cov', '-sc', type=bool, default=False)
 parser.add_argument('--action_cov', '-ac', type=bool, default=False)
+parser.add_argument('--state_cov_training', '-tsc', type=bool, default=False)
+parser.add_argument('--action_cov_training', '-tac', type=bool, default=False)
 parser.add_argument('--n_steps',  type=int, default=20000)
 parser.add_argument('--run_type', type=str, default='train')
 
@@ -46,11 +48,13 @@ print('')
 print("cd", "/user/work/px19783/code_repository/RL_project/TaylorRL")
 
 if args.state_cov:
-    state_cov_range = torch.linspace(0.000001,0.0001,5)
-else:
-    state_cov_range = [0.00001]
+    # add state cov true variable
+    if args.state_cov_training:
+        state_cov_range = torch.linspace(0.000001,0.0001,5)
+    else:
+        state_cov_range = [0.00001]
 
-if args.action_cov:
+if args.action_cov_training:
     action_cov_range = torch.linspace(0.000001,0.0001,5)
 else:
     action_cov_range = [0.25]
