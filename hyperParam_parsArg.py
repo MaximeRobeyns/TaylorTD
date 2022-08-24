@@ -48,21 +48,22 @@ print('')
 print("cd", "/user/work/px19783/code_repository/RL_project/TaylorRL")
 
 if args.state_cov:
-    # add state cov true variable
+    # MISSING: add state cov true variable
     if args.state_cov_training:
         state_cov_range = torch.linspace(0.000001,0.0001,5)
     else:
         state_cov_range = [0.00001]
-
-if args.action_cov_training:
-    action_cov_range = torch.linspace(0.000001,0.0001,5)
-else:
-    action_cov_range = [0.25]
+if args.action_cov:
+    # MISSING: add action update order =1
+    if args.action_cov_training:
+        action_cov_range = torch.linspace(0.000001,0.0001,5)
+    else:
+        action_cov_range = [0.25]
 
 
 counter = 0
 seeds = [1] # Add random seeds    
-# MISSING: need to add the directory    
+# MISSING: seeds
 for s in seeds:
 
     for sc in state_cov_range:
