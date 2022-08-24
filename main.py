@@ -60,7 +60,7 @@ def main_config():
     n_warm_up_steps = 1000                          # number of steps on real MDP to populate the initial buffer, actions selected by random agent
 
     normalize_data = True                           # normalize states, actions, next states to zero mean and unit variance (both for model training and policy training)
-    run_type = 'test' 
+    run_type = 'trial' 
     run_number = 88
 #    seed = 891 # REMOVE, for testing purpose only!
 
@@ -183,7 +183,7 @@ def infra_config(env_name,run_type,run_number):
     dump_dir = '__default__'                        # Set dump_dir=None if you don't want to be create dump_dir
     if dump_dir == '__default__':
     #    dump_dir = os.path.join(self_dir, 'logs', f'{datetime.now().strftime("%Y%m%d%H%M%S")}_{os.getpid()}')
-        dump_dir = os.path.join(self_dir, 'results',f'{env_name}',f'{run_type}_{run_number}')
+        dump_dir = os.path.join(self_dir, 'results',f'{env_name}',f'{run_type}',f'{run_number}') # Add this to save file in specif directory
     if dump_dir is not None:
         os.makedirs(dump_dir, exist_ok=True)
     neptune_project = None                          # e.g. yourlogin/sandbox
