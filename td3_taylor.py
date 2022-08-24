@@ -244,7 +244,8 @@ class TD3_Taylor(nn.Module):
                  
                 # KEY: need to change its sign as passed to  gradient descent not ascent:
                 state_term1 = -1 * ( torch.mean(inner_product_last_dim(dsc1.detach(),dQs1)) + torch.mean(inner_product_last_dim(dsc2.detach(),dQs2)))
-
+                
+                states.requires_grad_(False) # Key: Since states stored in a buffer need to switch off grad after update else next time that state used, the current action will carry its gradient
 
     
         # NOTE: Need to change this into a direct 2nd order update, at the moment it is for the residual
