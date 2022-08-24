@@ -244,7 +244,7 @@ class TD3_Taylor(nn.Module):
                  
                 # KEY: need to change its sign as passed to  gradient descent not ascent:
                 state_term1 = -1 * ( torch.mean(inner_product_last_dim(dsc1.detach(),dQs1)) + torch.mean(inner_product_last_dim(dsc2.detach(),dQs2)))
-
+                
 
     
         # NOTE: Need to change this into a direct 2nd order update, at the moment it is for the residual
@@ -282,6 +282,7 @@ class TD3_Taylor(nn.Module):
         critic_loss.backward()
         torch.nn.utils.clip_grad_value_(self.critic.parameters(), self.grad_clip)
         self.critic_optimizer.step()
+
 
         if self.step_counter % self.policy_delay == 0:
             

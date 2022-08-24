@@ -401,6 +401,7 @@ class ImaginationTransitionsProvider:
         states, actions, logps, next_states = self.imagination.many_steps(agent) # This returns a batch of initial states and the corresponding "imagined" next states with the actions
         rewards = self.task(states, actions, next_states)  # Here computes the task reward accessing the true reward function for the task
         dones = self.is_done(next_states)
+
         return states, actions, logps, next_states, rewards, dones
 
 
