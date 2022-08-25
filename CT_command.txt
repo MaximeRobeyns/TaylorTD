@@ -1,1 +1,0 @@
-python3 hyperParam_parsArg.py -e HalfCheetah-v2 -sc True -ac True --cmd python3 main.py 

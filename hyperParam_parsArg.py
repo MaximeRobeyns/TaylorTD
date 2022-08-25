@@ -19,12 +19,12 @@ parser.add_argument('--exclude',type=str,nargs='?', default='=bp1-gpu004,bp1-gpu
 parser.add_argument('--cmd',           type=str, nargs='*',             help="job command --- must be last argument")
 parser.add_argument('--env-name', '-e', type=str)
 parser.add_argument('--agent_alg', '-a', type=str, default='td3_taylor')
-parser.add_argument('--state_cov', '-sc', type=bool, default=False)
-parser.add_argument('--action_cov', '-ac', type=bool, default=False)
-parser.add_argument('--state_cov_training', '-tsc', type=bool, default=False)
-parser.add_argument('--action_cov_training', '-tac', type=bool, default=False)
+parser.add_argument('--grad_state', '-gs', type=bool, default=False)
+parser.add_argument('--update_order', '-or', type=int, default=0)
+parser.add_argument('--state_cov_training', '-tsc', type=bool, default=False, help="Set to True to do hyp-search over state covariance")
+parser.add_argument('--action_cov_training', '-tac', type=bool, default=False,help="Set to True to do hyp-search over action covariance")
 parser.add_argument('--n_steps',  type=int, default=20000)
-parser.add_argument('--run_type', type=str, default='train')
+parser.add_argument('--run_type', type=str, default='trial', help="This determine the directory folder to save the data -e.g. test/train/etc")
 
 # split input args on --cmd
 cmd_idx = sys.argv.index('--cmd')
@@ -33,7 +33,7 @@ args = parser.parse_args(args)
 cmd = ' '.join(sys.argv[(1+cmd_idx):])
 
 print(f"#!/bin",)
-print(f"#SBATCH --job-name {args.job_name}")
+print(f"#SBATCH --job-name {args.env_name}")
 print(f"#SBATCH --partition {args.partition}")
 print(f"#SBATCH --nodes {args.nodes}")
 print(f"#SBATCH --ntasks-per-node {args.ntasks_per_node}")
@@ -41,34 +41,40 @@ print(f"#SBATCH --cpus-per-task {args.cpus_per_task}"  )
 print(f"#SBATCH --gpus {args.gpus}"  )
 print(f"#SBATCH --time=0-{args.hours}:{args.mins}:00")
 print(f"#SBATCH --mem  {args.mem}G"  )
-print(f"#SBATCH --output {args.output}"  )
+print(f"#SBATCH --output {args.env_name}"+f"_{args.run_type}")
 print(f"#SBATCH --exclude={args.exclude}"  )
 
 print('')
 print("cd", "/user/work/px19783/code_repository/RL_project/TaylorRL")
 
-if args.state_cov:
-    # MISSING: add state cov true variable
+if args.grad_state:
+
     if args.state_cov_training:
-        state_cov_range = torch.linspace(0.000001,0.0001,5)
+        state_cov_range = torch.linspace(0.000001,0.0001,5) # Change this range to set range for state_cov hyper-param search
     else:
         state_cov_range = [0.00001]
-if args.action_cov:
-    # MISSING: add action update order =1
+        
+else:
+        state_cov_range=[0]
+
+if args.update_order > 0:
+
     if args.action_cov_training:
-        action_cov_range = torch.linspace(0.000001,0.0001,5)
+        action_cov_range = torch.linspace(0.000001,0.0001,5) # Change this range to set range for action_cov hyper-param search
     else:
         action_cov_range = [0.25]
 
+else:
+        action_cov_range=[0]
 
 counter = 0
 seeds = [1] # Add random seeds    
-# MISSING: seeds
+
 for s in seeds:
 
     for sc in state_cov_range:
 
         for ac in action_cov_range:
 
-            print(cmd,' with env_name=GYMMB_'+args.env_name,'agent_alg='+args.agent_alg,f'td3_action_cov={ac}',f'td3_state_cov={sc}',f'n_total_steps={args.n_steps}', f'seed={s}',f'run_type='+args.run_type,f'run_number={counter}')
+            print(cmd,' with env_name=GYMMB_'+args.env_name,'agent_alg='+args.agent_alg,f'td3_action_cov={ac}',f'td3_state_cov={sc}',f'n_total_steps={args.n_steps}', f'seed={s}',f'run_type='+args.run_type,f'run_number={counter}', f'td3_update_order={args.update_order}', f'grad_state={args.grad_state}', f'seed={s}')
             counter+=1
