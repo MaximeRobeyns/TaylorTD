@@ -137,12 +137,13 @@ class Residual_MAGE(nn.Module):
         ## Noise-corrupted action vector:
         # Select action according to policy and add clipped noise
         # This is the standard TD3 action-selection procedure
-        noise = (
-                torch.randn_like(actions) * self.policy_noise
-        ).clamp(-self.noise_clip, self.noise_clip)
+        #noise = (
+        #        torch.randn_like(actions) * self.policy_noise
+        #).clamp(-self.noise_clip, self.noise_clip)
         # frozen next action vector
-        raw_next_actions = self.actor_target(next_states)
-        next_actions = (raw_next_actions + noise).clamp(-1, 1)
+
+        raw_next_actions = self.actor(next_states) #self.actor_target(next_states)
+        next_actions = raw_next_actions #(raw_next_actions + noise).clamp(-1, 1) # Note for Residual want next action to be correct one, not noisy version, and not Traget pol?
         
         # compute the target Q value depending on the update
         
@@ -194,7 +195,7 @@ class Residual_MAGE(nn.Module):
         torch.nn.utils.clip_grad_value_(self.critic.parameters(), self.grad_clip)
         self.critic_optimizer.step()
 
-        if self.step_counter % self.policy_delay == 0:
+        if self.step_counter % 1 == 0: #% self.policy_delay == 0: # For residual try to update policy every iteration
             # Compute actor loss
             q = self.critic(states, self.actor(states))  # originally in TD3 we had here q1 only
             actor_loss = -q.mean()
@@ -207,8 +208,8 @@ class Residual_MAGE(nn.Module):
             self.actor_optimizer.step()
 
             # Update the frozen target policy
-            for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
-                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+            #for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
+            #    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
         return raw_next_actions[0, 0].item(), standard_loss.item(), self.tdg_error_weight * gradient_loss.item(), self.last_actor_loss
 

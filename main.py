@@ -62,7 +62,7 @@ def main_config():
     normalize_data = True                           # normalize states, actions, next states to zero mean and unit variance (both for model training and policy training)
     run_type = 'trial' 
     run_number = 88
-#    seed = 891 # REMOVE, for testing purpose only!
+    seed = 891 # REMOVE, for testing purpose only!
 
 # noinspection PyUnusedLocal
 @ex.config
@@ -202,7 +202,6 @@ def setup(seed, dump_dir, omp_num_threads, print_config, _run):
 
     np.random.seed(seed)
     torch.manual_seed(seed)
-
     torch.set_num_threads(omp_num_threads)
     os.environ['OMP_NUM_THREADS'] = str(omp_num_threads)
     os.environ['MKL_NUM_THREADS'] = str(omp_num_threads)
@@ -227,8 +226,8 @@ def get_env(env_name, record, seed): # REMOVE seed from argument, only added fr
     
     # REMOVE: Fixed all the seeds ------------
 
-    env.seed(np.random.randint(np.iinfo(np.uint32).max))
-    #env.seed(seed)
+    #env.seed(np.random.randint(np.iinfo(np.uint32).max))
+    env.seed(seed)
 
     if hasattr(env.action_space, 'seed'):  # Only for more recent gym
         env.action_space.seed(np.random.randint(np.iinfo(np.uint32).max))
