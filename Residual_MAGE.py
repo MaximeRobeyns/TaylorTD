@@ -183,7 +183,7 @@ class Residual_MAGE(nn.Module):
 
 
                 # Compute magnitude of gradient of TD relative to actions
-                gradient_loss = 0.5 * loss_fn(gradients_error_norms, zero_targets)  
+                gradient_loss = torch.mean(gradients_error_norms) #0.5 * loss_fn(gradients_error_norms, zero_targets)  
         
 
        
