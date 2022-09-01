@@ -247,7 +247,7 @@ class TD3_Taylor(nn.Module):
                 # KEY: need to change its sign as passed to  gradient descent not ascent:
                 #state_term1 = -1 * ( torch.mean(inner_product_last_dim(dsc1.detach(),dQs1)) + torch.mean(inner_product_last_dim(dsc2.detach(),dQs2)))
                 
-                action_term1 = -1 * ( torch.mean(inner_product_last_dim(dsc1.detach(),dQs1)/(dsc1.detach().norm(dim=1, keepdim=True) * dQs1.detach().norm(dim=1, keepdim=True)))
+                state_term1 = -1 * ( torch.mean(inner_product_last_dim(dsc1.detach(),dQs1)/(dsc1.detach().norm(dim=1, keepdim=True) * dQs1.detach().norm(dim=1, keepdim=True)))
                                 + torch.mean(inner_product_last_dim(dsc2.detach(),dQs2)/(dsc2.detach().norm(dim=1, keepdim=True) * dQs2.detach().norm(dim=1, keepdim=True))))
 
     

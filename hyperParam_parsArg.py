@@ -46,6 +46,7 @@ print(f"#SBATCH --exclude={args.exclude}"  )
 
 print('')
 print("cd", "/user/work/px19783/code_repository/RL_project/TaylorRL")
+print('')
 
 if args.grad_state:
 
@@ -60,7 +61,7 @@ else:
 if args.update_order > 0:
 
     if args.action_cov_training:
-        action_cov_range = torch.linspace(0.000001,0.0001,5) # Change this range to set range for action_cov hyper-param search
+        action_cov_range = torch.linspace(0.01,1,5) # Change this range to set range for action_cov hyper-param search
     else:
         action_cov_range = [0.25]
 
@@ -68,7 +69,8 @@ else:
         action_cov_range=[0]
 
 counter = 0
-seeds = [1] # Add random seeds    
+np.random.seed(112943082) # set a random seed 
+seeds = np.random.randint(0,1000000000,5) # Add random seeds    
 
 for s in seeds:
 
