@@ -26,7 +26,7 @@ class SingleStepImagination:
                 states = states.detach().requires_grad_() # create an alias of states which share data, but requires_grad, in this way we are not changing the grad flag of data stored in the buffer
 
 
-        actions, logps = agent.get_action_with_logp(states)
+        actions, logps = agent.get_action_with_logp(states) # KEY:  here actions are selected deterministically
 
         # NOTE: Add the state.require_grad after computing the actions so that the action remains fixed when differentiating relative to the state 
         #if self.grad_state:

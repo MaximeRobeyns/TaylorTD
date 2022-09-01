@@ -529,7 +529,7 @@ def evaluate_on_task(agent, model, buffer, task, task_name, context, *,  _run,
 
     video_file_base = dump_dir + f'/{context}_step_{ex.step_i}_task_{task_name}_episode' + '_{}.mp4' if dump_dir is not None else None
     env_loop = EnvLoop(get_env, render=render, record=record, video_file_base=video_file_base, run=_run)
-    agent = to_deterministic_agent(agent)
+    agent = to_deterministic_agent(agent) # This ensures evalutation performance are based on the deterministic (optimal) action 
 
     # Test agent on real environment by running an episode
     for ep_i in range(1, n_eval_episodes_per_policy + 1):
@@ -675,7 +675,7 @@ class MainTrainingLoop:
 
         behavioral_agent = self.random_agent if ex.step_i <= n_warm_up_steps else self.agent
         with torch.no_grad():
-            action = behavioral_agent.get_action(self.env_loop.state, deterministic=False).to('cpu')
+                action = behavioral_agent.get_action(self.env_loop.state, deterministic=False).to('cpu') # KEY: ensure real transition are sampled based on stochastic policy
         # save s
         prev_state = self.env_loop.state.clone().to(device)
 
