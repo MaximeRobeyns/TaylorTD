@@ -226,8 +226,8 @@ def get_env(env_name, record, seed): # REMOVE seed from argument, only added fr
     
     # REMOVE: Fixed all the seeds ------------
 
-    #env.seed(np.random.randint(np.iinfo(np.uint32).max))
-    env.seed(seed)
+    env.seed(np.random.randint(np.iinfo(np.uint32).max))
+    #env.seed(seed) # tried remove this to see if get variable accuracy
 
     if hasattr(env.action_space, 'seed'):  # Only for more recent gym
         env.action_space.seed(np.random.randint(np.iinfo(np.uint32).max))
