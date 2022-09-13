@@ -175,6 +175,8 @@ def infra_config(env_name,agent_alg,run_type,run_number):
     gpu_id = 0                                      # ID of GPU to use (by default use GPU 0)
     print_config = True                             # Set False if you don't want that (e.g. for regression tests)
 
+    chekpoint = False # Use true to store checkpoints
+
     if use_cuda and 'CUDA_VISIBLE_DEVICES' not in os.environ:  # gpu_id is used only if CUDA_VISIBLE_DEVICES was not set
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
     device = torch.device('cuda' if use_cuda and torch.cuda.is_available() else 'cpu')
@@ -210,8 +212,8 @@ def setup(seed, dump_dir, omp_num_threads, print_config, _run):
 """ Initialization Helpers (Get) """
 
 @ex.capture
-def get_dumpDir(dump_dir):
-    return dump_dir
+def get_dumpDir(checkpoint,dump_dir):
+    return chekpoint ,dump_dir
 
 @ex.capture
 def get_env(env_name, record, seed): # REMOVE seed from argument, only added from testing purposes
@@ -619,7 +621,7 @@ class MainTrainingLoop:
     def __init__(self, *, task_name):
         logger.info(f"Executing training...")
         
-        self.dump_dir = get_dumpDir()
+        self.chekpoint, self.dump_dir = get_dumpDir()
         tmp_env = get_env(record=False)
         self.is_done = tmp_env.unwrapped.is_done
         self.eval_tasks = {task_name: tmp_env.tasks()[task_name]}
@@ -735,15 +737,23 @@ class MainTrainingLoop:
 
         experiment_finished = ex.step_i >= n_total_steps
         
-        if experiment_finished:
-            torch.save(self.agent.Actor.state_dict(),os.path.join(self.dump_dir,'Models/Agent.pt')
-            torch.save(self.agent.actor_target.state_dict(),os.path.join(self.dump_dir,'Models/TagetAgent.pt')
-            torch.save(self.agent.critic.state_dict(),os.path.join(self.dump_dir,'Models/Critic.pt')
-            torch.save(self.agent.critic_target.state_dict(),os.path.join(self.dump_dir,'Models/TagetCritic.pt')
+        if experiment_finished and self.chekpoint:
+            torch.save({
+                'N_step': ex.step_i
+                'Memory_buffer': self.buffer,
+                'Agent: ': self.agent.actor.state_dict(),
+                'Target_Agent': self.agent.actor_target.state_dict(),
+                'Agent_optim': self.agent.actor_optimizer.state_dict(),
+                'Critic': self.agent.critic.state_dict(),
+                'Target_Critic': self.agent.critic_target.state_dict(),
+                'Critic_optim': self.agent.critic_optimizer.state_dict(),
+                'Env_model' : self.model.state_dict(),
+                'Env_model_optim': self.model_optimizer.state_dict(),
+                'Train_rwd': train_reward,
+                'Rwd_model': self.reward_model.state_dict(),
+                'Rwd_model_optim': self.reward_model_optimizer.state_dict(),
+            }, os.path.join(self.dump_dir, 'CheckPoint/Model.pt'))
 
-            torch.save(self.model.state_dict(),os.path.join(self.dump_dir,'Models/Model.pt')
-            if train_reward:
-                torch.save(self.reward_model.state_dict(),os.path.join(self.dump_dir,'Models/Reward_Model.pt')
 
         return DotMap(
             done=experiment_finished,
