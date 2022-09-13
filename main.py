@@ -209,6 +209,9 @@ def setup(seed, dump_dir, omp_num_threads, print_config, _run):
 
 """ Initialization Helpers (Get) """
 
+@ex.capture
+def get_dumpDir(dump_dir):
+    return dump_dir
 
 @ex.capture
 def get_env(env_name, record, seed): # REMOVE seed from argument, only added from testing purposes
@@ -615,7 +618,8 @@ class MainTrainingLoop:
     @ex.capture
     def __init__(self, *, task_name):
         logger.info(f"Executing training...")
-
+        
+        self.dump_dir = get_dumpDir()
         tmp_env = get_env(record=False)
         self.is_done = tmp_env.unwrapped.is_done
         self.eval_tasks = {task_name: tmp_env.tasks()[task_name]}
@@ -730,6 +734,17 @@ class MainTrainingLoop:
             self.last_avg_eval_score = evaluate_on_tasks(agent=self.agent, model=self.model, buffer=self.buffer, task_name=task_name, context='eval')
 
         experiment_finished = ex.step_i >= n_total_steps
+        
+        if experiment_finished:
+            torch.save(self.agent.Actor.state_dict(),os.path.join(self.dump_dir,'Models/Agent.pt')
+            torch.save(self.agent.actor_target.state_dict(),os.path.join(self.dump_dir,'Models/TagetAgent.pt')
+            torch.save(self.agent.critic.state_dict(),os.path.join(self.dump_dir,'Models/Critic.pt')
+            torch.save(self.agent.critic_target.state_dict(),os.path.join(self.dump_dir,'Models/TagetCritic.pt')
+
+            torch.save(self.model.state_dict(),os.path.join(self.dump_dir,'Models/Model.pt')
+            if train_reward:
+                torch.save(self.reward_model.state_dict(),os.path.join(self.dump_dir,'Models/Reward_Model.pt')
+
         return DotMap(
             done=experiment_finished,
             avg_eval_score=self.last_avg_eval_score,
