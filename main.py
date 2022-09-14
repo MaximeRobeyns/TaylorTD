@@ -650,7 +650,6 @@ class MainTrainingLoop:
 
         self._common_setup()
         
-        if restart_checkpoint:
 
     @ex.capture
     def _common_setup(self, *, render, record, dump_dir,checkpoint, _run):
