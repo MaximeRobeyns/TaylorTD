@@ -175,7 +175,7 @@ def infra_config(env_name,agent_alg,run_type,run_number):
     gpu_id = 0                                      # ID of GPU to use (by default use GPU 0)
     print_config = True                             # Set False if you don't want that (e.g. for regression tests)
 
-    chekpoint = False # Use true to store checkpoints
+    checkpoint = False # Use true to store checkpoints
 
     if use_cuda and 'CUDA_VISIBLE_DEVICES' not in os.environ:  # gpu_id is used only if CUDA_VISIBLE_DEVICES was not set
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
@@ -211,9 +211,6 @@ def setup(seed, dump_dir, omp_num_threads, print_config, _run):
 
 """ Initialization Helpers (Get) """
 
-@ex.capture
-def get_dumpDir(checkpoint,dump_dir):
-    return chekpoint ,dump_dir
 
 @ex.capture
 def get_env(env_name, record, seed): # REMOVE seed from argument, only added from testing purposes
@@ -618,10 +615,9 @@ class MainTrainingLoop:
     """ Resembles ray.Trainable """
 
     @ex.capture
-    def __init__(self, *, task_name):
+    def __init__(self, *, task_name, restart_checkpoint):
         logger.info(f"Executing training...")
         
-        self.chekpoint, self.dump_dir = get_dumpDir()
         tmp_env = get_env(record=False)
         self.is_done = tmp_env.unwrapped.is_done
         self.eval_tasks = {task_name: tmp_env.tasks()[task_name]}
@@ -653,14 +649,18 @@ class MainTrainingLoop:
         self.random_agent = get_random_agent()
 
         self._common_setup()
+        
+        if restart_checkpoint:
 
     @ex.capture
-    def _common_setup(self, *, render, record, dump_dir, _run):
+    def _common_setup(self, *, render, record, dump_dir,checkpoint, _run):
         """ Called in __init__ but needs also to be called after restore (due
         to reinitialized randomness)
         """
         video_file_base = dump_dir + "/max_exploitation_step_{}.mp4" if dump_dir is not None else None
         self.env_loop = EnvLoop(get_env, render=render, record=record, video_file_base=video_file_base, run=_run)
+        self.checkpoint = checkpoint
+        self.dump_dir = dump_dir
 
     def _setup_if_new(self):
         """ Executed for a new experiment only. This is a workaround for
@@ -737,11 +737,15 @@ class MainTrainingLoop:
 
         experiment_finished = ex.step_i >= n_total_steps
         
-        if experiment_finished and self.chekpoint:
+        if experiment_finished and self.checkpoint and self.dump_dir is not None:
+
+            model_dir = os.path.join(self.dump_dir,'CheckPoint')
+            os.makedirs(model_dir, exist_ok=True)
+            
             torch.save({
-                'N_step': ex.step_i
+                'N_step': ex.step_i,
                 'Memory_buffer': self.buffer,
-                'Agent: ': self.agent.actor.state_dict(),
+                'Agent': self.agent.actor.state_dict(),
                 'Target_Agent': self.agent.actor_target.state_dict(),
                 'Agent_optim': self.agent.actor_optimizer.state_dict(),
                 'Critic': self.agent.critic.state_dict(),
@@ -752,7 +756,7 @@ class MainTrainingLoop:
                 'Train_rwd': train_reward,
                 'Rwd_model': self.reward_model.state_dict(),
                 'Rwd_model_optim': self.reward_model_optimizer.state_dict(),
-            }, os.path.join(self.dump_dir, 'CheckPoint/Model.pt'))
+            }, os.path.join(model_dir,'Model.pt'))
 
 
         return DotMap(
