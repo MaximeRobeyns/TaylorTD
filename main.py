@@ -176,6 +176,7 @@ def infra_config(env_name,agent_alg,run_type,run_number):
     print_config = True                             # Set False if you don't want that (e.g. for regression tests)
 
     checkpoint = False # Use true to store checkpoints
+    restart_checkpoint = False
 
     if use_cuda and 'CUDA_VISIBLE_DEVICES' not in os.environ:  # gpu_id is used only if CUDA_VISIBLE_DEVICES was not set
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
@@ -650,6 +651,27 @@ class MainTrainingLoop:
 
         self._common_setup()
         
+<<<<<<< HEAD
+=======
+        # Use to load a pre-trained model
+        if restart_checkpoint:
+>>>>>>> 396ea0e0d37038f6bdcb50be0cdeac584dfbbfc7
+
+            model_dir = os.path.join(self.dump_dir,'CheckPoint','Model.pt')
+            model = torch.load(model_dir)
+            self.buffer = model['Memory_buffer']
+            self.agent.actor.load_state_dict(model['Agent'])
+            self.agent.actor_target.load_state_dict(model['Target_Agent'])
+            self.agent.actor_optimizer.load_state_dict(model['Agent_optim'])
+            self.agent.critic.load_state_dict(model['Critic'])
+            self.agent.critic_target.load_state_dict(Model['Target_Critic'])
+            self.agent.critic_optimizer.load_state_dict(Model['Critic_optim'])
+            self.model.load_state_dict(model['Env_model'])
+            self.model_optimizer.load_state_dict(model['Env_model_optim'])
+            self.reward_model.load_state_dict(model['Rwd_model'])
+            self.reward_model_optimizer.load_state_dict(['Rwd_model_optim'])
+
+
 
     @ex.capture
     def _common_setup(self, *, render, record, dump_dir,checkpoint, _run):
@@ -777,9 +799,7 @@ class MainTrainingLoop:
 def train():
     
     # Ensure cuda is available
-    if not torch.cuda.is_available():
-        print("No GPU")
-        exit()
+    assert torch.cuda.is_available(), "No GPU"
     
     # main entrypoint.
     setup()
