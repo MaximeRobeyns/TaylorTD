@@ -131,7 +131,7 @@ def policy_training_config(env_name):
 
 # noinspection PyUnusedLocal
 @ex.config
-def policy_arch_config():
+def policy_arch_config(n_total_steps):
     # policy function
     policy_n_layers = 2                             # number of hidden layers (>=1)
     policy_n_units = 384                            # number of units in each hidden layer
@@ -162,9 +162,12 @@ def policy_arch_config():
     grad_state = False                          # Include gradiet of TD-error relative to state
 
 
-    # TD-Gradient parameters
+    # TD-Gradient parameters (MAGE)
     tdg_error_weight = 5.                           # weight to be used for value gradient td learning (in the paper we use alpha=1/tdg_error_weight=0.2)
     td_error_weight = 1.                            # weight for the standard td error for q learning
+
+
+    data_buffer_size = n_total_steps
 
 
 
@@ -176,7 +179,8 @@ def infra_config(env_name,agent_alg,run_type,run_number):
     print_config = True                             # Set False if you don't want that (e.g. for regression tests)
 
     checkpoint = False # Use true to store checkpoints
-    restart_checkpoint = False
+    restart_checkpoint = False # Use to load model from an existing checkpoint
+    checkpoint_freq = 25000
 
     if use_cuda and 'CUDA_VISIBLE_DEVICES' not in os.environ:  # gpu_id is used only if CUDA_VISIBLE_DEVICES was not set
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
@@ -360,8 +364,8 @@ def get_reward_model_optimizer(params, *, model_lr, model_weight_decay):
 
 
 @ex.capture
-def get_buffer(d_state, d_action, n_total_steps, normalize_data, device):
-    data_buffer_size = n_total_steps
+def get_buffer(d_state, d_action, n_total_steps, normalize_data, device, data_buffer_size):
+
     buffer = Buffer(d_action=d_action, d_state=d_state, size=data_buffer_size)
     if normalize_data:
         buffer.setup_normalizer(TransitionNormalizer(d_state, d_action, device))
@@ -616,7 +620,7 @@ class MainTrainingLoop:
     """ Resembles ray.Trainable """
 
     @ex.capture
-    def __init__(self, *, task_name, restart_checkpoint):
+    def __init__(self, *, task_name):
         logger.info(f"Executing training...")
         
         tmp_env = get_env(record=False)
@@ -651,30 +655,26 @@ class MainTrainingLoop:
 
         self._common_setup()
         
-<<<<<<< HEAD
-=======
         # Use to load a pre-trained model
-        if restart_checkpoint:
->>>>>>> 396ea0e0d37038f6bdcb50be0cdeac584dfbbfc7
-
+        if self.restart_checkpoint and self.dump_dir is not None:
             model_dir = os.path.join(self.dump_dir,'CheckPoint','Model.pt')
-            model = torch.load(model_dir)
-            self.buffer = model['Memory_buffer']
-            self.agent.actor.load_state_dict(model['Agent'])
-            self.agent.actor_target.load_state_dict(model['Target_Agent'])
-            self.agent.actor_optimizer.load_state_dict(model['Agent_optim'])
-            self.agent.critic.load_state_dict(model['Critic'])
-            self.agent.critic_target.load_state_dict(Model['Target_Critic'])
-            self.agent.critic_optimizer.load_state_dict(Model['Critic_optim'])
-            self.model.load_state_dict(model['Env_model'])
-            self.model_optimizer.load_state_dict(model['Env_model_optim'])
-            self.reward_model.load_state_dict(model['Rwd_model'])
-            self.reward_model_optimizer.load_state_dict(['Rwd_model_optim'])
+            MODEL = torch.load(model_dir)
+            self.buffer = MODEL['Memory_buffer']
+            self.agent.actor.load_state_dict(MODEL['Agent'])
+            self.agent.actor_target.load_state_dict(MODEL['Target_Agent'])
+            self.agent.actor_optimizer.load_state_dict(MODEL['Agent_optim'])
+            self.agent.critic.load_state_dict(MODEL['Critic'])
+            self.agent.critic_target.load_state_dict(MODEL['Target_Critic'])
+            self.agent.critic_optimizer.load_state_dict(MODEL['Critic_optim'])
+            self.model.load_state_dict(MODEL['Env_model'])
+            self.model_optimizer.load_state_dict(MODEL['Env_model_optim'])
+            self.reward_model.load_state_dict(MODEL['Rwd_model'])
+            self.reward_model_optimizer.load_state_dict(MODEL['Rwd_model_optim'])
 
 
 
     @ex.capture
-    def _common_setup(self, *, render, record, dump_dir,checkpoint, _run):
+    def _common_setup(self, *, render, record, dump_dir,checkpoint, restart_checkpoint, checkpoint_freq, _run):
         """ Called in __init__ but needs also to be called after restore (due
         to reinitialized randomness)
         """
@@ -682,6 +682,8 @@ class MainTrainingLoop:
         self.env_loop = EnvLoop(get_env, render=render, record=record, video_file_base=video_file_base, run=_run)
         self.checkpoint = checkpoint
         self.dump_dir = dump_dir
+        self.restart_checkpoint = restart_checkpoint
+        self.checkpoint_freq = checkpoint_freq
 
     def _setup_if_new(self):
         """ Executed for a new experiment only. This is a workaround for
@@ -758,7 +760,7 @@ class MainTrainingLoop:
 
         experiment_finished = ex.step_i >= n_total_steps
         
-        if experiment_finished and self.checkpoint and self.dump_dir is not None:
+        if ex.step_i % self.checkpoint_freq == 0  and self.checkpoint and self.dump_dir is not None:
 
             model_dir = os.path.join(self.dump_dir,'CheckPoint')
             os.makedirs(model_dir, exist_ok=True)
