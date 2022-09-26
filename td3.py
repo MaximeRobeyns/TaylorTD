@@ -99,13 +99,16 @@ class TD3(nn.Module):
         """Get action gets the action vector; a vector of elements bound to the
         [-1, 1] range. Can be interpreted as logits."""
         states = states.to(self.device)
-        with torch.no_grad():
-            if self.normalizer is not None:
-                states = self.normalizer.normalize_states(states)
-            actions = self.actor(states)
-            if not deterministic:
-                actions += torch.randn_like(actions) * self.expl_noise
-            return actions.clamp(-1, +1)
+
+        if self.normalizer is not None:
+            states = self.normalizer.normalize_states(states)
+
+        actions = self.actor(states)
+
+        if not deterministic:
+            actions += torch.randn_like(actions) * self.expl_noise
+
+        return actions.clamp(-1, +1)
 
     def get_action_with_logp(self, states):
         """Returns action vector, with gradient info???"""
@@ -122,7 +125,7 @@ class TD3(nn.Module):
             actions = actions.to(self.device)
             return self.critic(states, actions)[0]  # just q1
 
-    def update(self, states, actions, logps, rewards, next_states, masks):
+    def update(self, states, actions, rewards, next_states, masks):
         """This seems to be the main event, where the policy is updated"""
         if self.normalizer is not None:
             # normalise / pre-process state information, both this state and

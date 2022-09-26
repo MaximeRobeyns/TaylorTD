@@ -159,7 +159,8 @@ def policy_arch_config(n_total_steps):
     td3_gamma_H = 0.1                               # weight on 2-order update
     
     
-    grad_state = False                          # Include gradiet of TD-error relative to state
+    grad_state = False                        # Include gradiet of TD-error relative to state
+    det_action = True                         # Determines whether Q in model transitions evaluated for deterministic or stochastic policy
 
 
     # TD-Gradient parameters (MAGE)
@@ -325,7 +326,7 @@ def to_deterministic_agent(agent):
     class DeterministicAgent:
         @staticmethod
         def get_action(states):
-            return agent.get_action(states, deterministic=True)
+            return agent.get_action(states, deterministic=True).detach()
 
     return DeterministicAgent()
 
@@ -349,8 +350,8 @@ def get_reward_model(d_action, d_state, reward_n_units, reward_n_layers, reward_
 
 
 @ex.capture # Return the function (i.e. SingleStepImagination) to generate (imagined) one-step transitions based on the model of environment
-def get_imagination(model, initial_states, *, model_sampling_type, policy_actors,grad_state):
-        return SingleStepImagination(model, initial_states, n_actors=policy_actors, model_sampling_type=model_sampling_type, grad_state=grad_state)
+def get_imagination(model, initial_states, *, model_sampling_type, policy_actors,grad_state, det_action):
+        return SingleStepImagination(model, initial_states, n_actors=policy_actors, model_sampling_type=model_sampling_type, grad_state=grad_state, det_action=det_action)
 
 
 @ex.capture
@@ -391,8 +392,7 @@ class BufferTransitionsProvider:
         states, actions, next_states = [x[idx].to(self.device) for x in [states, actions, next_states]]
         rewards = self.task(states, actions, next_states)
         dones = self.is_done(next_states)
-        logps = torch.ones(actions.shape[0], device=self.device) * np.inf
-        return states, actions, logps, next_states, rewards, dones
+        return states, actions, next_states, rewards, dones
 
 # This class relies on input object imagination to generate an imaginary(predicted) transition (i.e. based on the model)
 # it also relies on input task to compute the true reward give the transition and the task
@@ -404,11 +404,11 @@ class ImaginationTransitionsProvider:
         self.imagination.reset()
 
     def get_training_transitions(self, agent):
-        states, actions, logps, next_states = self.imagination.many_steps(agent) # This returns a batch of initial states and the corresponding "imagined" next states with the actions
+        states, actions, next_states = self.imagination.many_steps(agent) # This returns a batch of initial states and the corresponding "imagined" next states with the actions
         rewards = self.task(states, actions, next_states)  # Here computes the task reward accessing the true reward function for the task
         dones = self.is_done(next_states)
 
-        return states, actions, logps, next_states, rewards, dones
+        return states, actions, next_states, rewards, dones
 
 
 @ex.capture
@@ -426,7 +426,7 @@ def train_agent(agent, model, reward_model, buffer, task, task_name, is_done, mo
 
     q_loss, pi_loss = np.nan, np.nan
     for img_step_i in range(1, policy_training_n_iters + 1):
-        states, actions, logps, next_states, rewards, dones = data_provider.get_training_transitions(agent) # Key method call where get all the RL variables (s,a,r,s',d)
+        states, actions, next_states, rewards, dones = data_provider.get_training_transitions(agent) # Key method call where get all the RL variables (s,a,r,s',d)
         if train_reward:
             rewards = reward_model(states, actions, next_states).squeeze(1)
 
@@ -434,7 +434,7 @@ def train_agent(agent, model, reward_model, buffer, task, task_name, is_done, mo
             continue
 
         for img_update_i in range(1, policy_training_n_updates_per_iter + 1):
-            raw_action, q_loss, q_grad_loss, pi_loss = agent.update(states, actions, logps, rewards, next_states, masks=~dones) # Key method call to the critic and actor update
+            raw_action, q_loss, q_grad_loss, pi_loss = agent.update(states, actions, rewards, next_states, masks=~dones) # Key method call to the critic and actor update
             # This is rare but can still happen
             if agent.catastrophic_divergence(q_loss, pi_loss):
                 logger.info("Catastrophic divergence detected. Agent reset.")
