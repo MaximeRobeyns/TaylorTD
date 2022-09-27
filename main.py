@@ -17,7 +17,6 @@ import torch
 import os
 import sacred
 import gym
-import neptune
 from env_loop import EnvLoop
 from datetime import datetime
 from logger import configure_logger
@@ -32,9 +31,7 @@ import sacred_utils  # For a custom mongodb flag
 
 from radam import RAdam
 from reward_model import RewardModel
-from td3 import TD3
 from td3_taylor import TD3_Taylor
-from ddpg import DDPG
 from Residual_MAGE import Residual_MAGE
 from wrappers import BoundedActionsEnv, IsDoneEnv, MuJoCoCloseFixWrapper, RecordedEnv
 from buffer import Buffer
@@ -75,12 +72,8 @@ def eval_config():
 @ex.config
 def env_config(n_total_steps):
     env_name = 'GYMMB_HalfCheetah-v2'               # environment name: GYMMB_* or Magellan*
-    task_name = 'standard'                          # Name of task to perform within environment e.g. in half cheetah env. either 'running' or 'flipping'  # TODO: We could accept a combined task e.g. flipping+running+renyi
+    task_name = 'standard'                          # Name of task to perform within environment e.g. in half cheetah env. either 'running' or 'flipping'  
 
-    # Misc
-    render = False                                  # render the environment visually (warning: could open too many windows)
-    record = False                                  # record videos of episodes (warning: could be slower and use up disk space)
-    record_freq = int(n_total_steps * 0.05)         # frequency in steps to record a complete episode (while the agent is training)
 
     env = gym.make(env_name)
     d_state = env.observation_space.shape[0]        # state dimensionality
@@ -163,8 +156,7 @@ def policy_arch_config(n_total_steps):
     det_action = True                         # Determines whether Q in model transitions evaluated for deterministic or stochastic policy
 
 
-
-    data_buffer_size = n_total_steps
+    data_buffer_size = n_total_steps          # Memory buffer size  
 
 
 
@@ -190,7 +182,6 @@ def infra_config(env_name,agent_alg,run_type,run_number):
         dump_dir = os.path.join(self_dir, 'results',f'{env_name}',f'{agent_alg}',f'{run_type}',f'{run_number}') # Add this to save file in specif directory
     if dump_dir is not None:
         os.makedirs(dump_dir, exist_ok=True)
-    neptune_project = None                          # e.g. yourlogin/sandbox
 
     omp_num_threads = 1                             # 1 is usually the correct choice, especially when using GPU
 
@@ -215,7 +206,8 @@ def setup(seed, dump_dir, omp_num_threads, print_config, _run):
 
 
 @ex.capture
-def get_env(env_name, record, seed): # REMOVE seed from argument, only added from testing purposes
+def get_env(env_name): #, seed): # REMOVE seed from argument, only added from testing purposes
+
     """Setup the Gym environment"""
     env = gym.make(env_name)
     # clips actions before calling step.
@@ -225,9 +217,7 @@ def get_env(env_name, record, seed): # REMOVE seed from argument, only added fr
     env = IsDoneEnv(env)
     # Allows us to close mujoco better
     env = MuJoCoCloseFixWrapper(env)
-    if record:
-        env = RecordedEnv(env)
-    
+       
     # REMOVE: Fixed all the seeds ------------
 
     env.seed(np.random.randint(np.iinfo(np.uint32).max))
@@ -501,20 +491,17 @@ def train_reward_model(reward_model, optimizer, buffer, mode, model_training_n_b
 
 @ex.capture
 def evaluate_on_task(agent, model, buffer, task, task_name, context, *,  _run,
-                     n_eval_episodes_per_policy, render, record, dump_dir):
+                     n_eval_episodes_per_policy,  dump_dir):
     """ Evaluate agent or model & agent """
     episode_returns, episode_lengths = [], []
 
-    video_file_base = dump_dir + f'/{context}_step_{ex.step_i}_task_{task_name}_episode' + '_{}.mp4' if dump_dir is not None else None
-    env_loop = EnvLoop(get_env, render=render, record=record, video_file_base=video_file_base, run=_run)
     agent = to_deterministic_agent(agent) # This ensures evalutation performance are based on the deterministic (optimal) action 
 
     # Test agent on real environment by running an episode
     for ep_i in range(1, n_eval_episodes_per_policy + 1):
-        if ep_i == 1:  # We record only the first episode
-            env_loop.record_next_episode()
+
         with torch.no_grad():
-            states, actions, next_states = env_loop.episode(agent, video_file_suffix=ep_i)
+            states, actions, next_states = env_loop.episode(agent)
             rewards = task(states, actions, next_states)
 
         ep_return = rewards.sum().item()
@@ -531,7 +518,6 @@ def evaluate_on_task(agent, model, buffer, task, task_name, context, *,  _run,
 
 def evaluate_on_tasks(agent, model, buffer, task_name, context):
     logger.info(f"{ex.step_i:6d} | {context} | evaluating model for tasks...")
-    env = get_env(record=False)
     task = env.unwrapped.tasks()[task_name]
     env.close()
 
@@ -569,23 +555,6 @@ def log_last_episode(stats, *, _run):
         ex.mlog.add_scalars(f"train/{task_name}/episode", {'return': last_ep_return, 'length': last_ep_len})
 
 
-@ex.capture
-def get_neptune_ex(*, neptune_project, _run):
-    if neptune_project is None:
-        return None
-
-    return neptune.init(neptune_project).create_experiment(
-        name=_run.experiment_info['name'],
-        description=None,
-        params=sacred_utils.flatten_dict(_run.config),
-        tags=None,
-        upload_source_files=sacred_utils.get_filepaths(dirpath=_run.experiment_info['base_dir'],
-                                                       extensions=['.py', '.yaml', '.yml']),
-        logger=logging.getLogger(),
-        send_hardware_metrics=True,
-        git_info=neptune.utils.get_git_info(_run.experiment_info['base_dir']),
-    )
-
 
 class MainTrainingLoop:
     """ Resembles ray.Trainable """
@@ -594,7 +563,7 @@ class MainTrainingLoop:
     def __init__(self, *, task_name):
         logger.info(f"Executing training...")
         
-        tmp_env = get_env(record=False)
+        tmp_env = get_env()
         self.is_done = tmp_env.unwrapped.is_done
         self.eval_tasks = {task_name: tmp_env.tasks()[task_name]}
         self.exploitation_task = tmp_env.tasks()[task_name]
@@ -617,11 +586,10 @@ class MainTrainingLoop:
         # ends, this logs the total return and episode length
         self.stats = EpisodeStats(self.eval_tasks)
         self.last_avg_eval_score = None
-        self.neptune_ex = None
         ex.mlog = None
 
         # Not considered part of the state
-        self.new_experiment = True  # I need to know if I had to create a new experiment (neptune) or continue an old one
+        self.new_experiment = True
         self.random_agent = get_random_agent()
 
         self._common_setup()
@@ -641,34 +609,28 @@ class MainTrainingLoop:
             self.model_optimizer.load_state_dict(MODEL['Env_model_optim'])
             self.reward_model.load_state_dict(MODEL['Rwd_model'])
             self.reward_model_optimizer.load_state_dict(MODEL['Rwd_model_optim'])
-
-
-
+    
     @ex.capture
-    def _common_setup(self, *, render, record, dump_dir,checkpoint, restart_checkpoint, checkpoint_freq, _run):
-        """ Called in __init__ but needs also to be called after restore (due
-        to reinitialized randomness)
-        """
-        video_file_base = dump_dir + "/max_exploitation_step_{}.mp4" if dump_dir is not None else None
-        self.env_loop = EnvLoop(get_env, render=render, record=record, video_file_base=video_file_base, run=_run)
+    def _common_setup(self,*, dump_dir, checkpoint, restart_checkpoint, checkpoint_freq, _run):
+        
+        self.env_loop = EnvLoop(get_env, run=_run)
         self.checkpoint = checkpoint
         self.dump_dir = dump_dir
         self.restart_checkpoint = restart_checkpoint
         self.checkpoint_freq = checkpoint_freq
-
+    
+    @ex.capture
     def _setup_if_new(self):
-        """ Executed for a new experiment only. This is a workaround for
-        Trainable. """
+
         if self.new_experiment:
             self.new_experiment = False
-            self.neptune_ex = get_neptune_ex()
-            ex.mlog = MetricLogger(ex, self.neptune_ex)
+            ex.mlog = MetricLogger(ex)
 
     @ex.capture
-    def train(self, *, device, n_total_steps, n_warm_up_steps, record_freq, record,
+    def train(self, *, device, n_total_steps, n_warm_up_steps, 
               model_training_freq, policy_training_freq, eval_freq,
               task_name, model_training_n_batches, train_reward):
-        """ A single step of interaction with the environment. """
+
         self._setup_if_new()
 
         ex.step_i += 1
@@ -679,11 +641,9 @@ class MainTrainingLoop:
         # save s
         prev_state = self.env_loop.state.clone().to(device)
 
-        if record and (ex.step_i == 1 or ex.step_i % record_freq == 0):
-            self.env_loop.record_next_episode()
 
         # take a step, s, s' p()
-        state, next_state, done = self.env_loop.step(to_np(action), video_file_suffix=ex.step_i)
+        state, next_state, done = self.env_loop.step(to_np(action))
         # get reward; r = E(s, a, s')
         reward = self.exploitation_task(state, action, next_state).item()
         # add transition to the buffer; (s, a, s', r)
@@ -763,9 +723,6 @@ class MainTrainingLoop:
         self.env_loop.close()
         if ex.mlog is not None:
             ex.mlog.save_artifacts()
-            if ex.mlog.neptune_ex is not None:
-                logger.info("Stopping neptune...")
-                ex.mlog.neptune_ex.stop()
 
 
 @ex.automain
