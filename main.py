@@ -148,24 +148,20 @@ def policy_arch_config(n_total_steps):
 
     # common for value and policy
     agent_grad_clip = 5
-    agent_alg = 'td3'                               # td3 or ddpg
+    agent_alg = 'td3_taylor'                               # td3 or ddpg
 
     # Parameters for TD3
     td3_policy_delay = 2
     td3_expl_noise = 0.1
     td3_action_cov = 0.25                            #in Taylor RL (covariance of action points) - 5 works really well (equivalent value to MAGE)
     td3_update_order = 1                            # 1 or 2
-    td3_state_cov =0.1
+    td3_state_cov =0.00001
     td3_gamma_H = 0.1                               # weight on 2-order update
     
     
     grad_state = False                        # Include gradiet of TD-error relative to state
     det_action = True                         # Determines whether Q in model transitions evaluated for deterministic or stochastic policy
 
-
-    # TD-Gradient parameters (MAGE)
-    tdg_error_weight = 5.                           # weight to be used for value gradient td learning (in the paper we use alpha=1/tdg_error_weight=0.2)
-    td_error_weight = 1.                            # weight for the standard td error for q learning
 
 
     data_buffer_size = n_total_steps
@@ -248,31 +244,16 @@ def get_env(env_name, record, seed): # REMOVE seed from argument, only added fr
 def get_agent(mode, *, agent_alg):
     logger.debug(f"{ex.step_i:6d} | {mode} | getting fresh agent ...")
 
-    if agent_alg == 'td3':
-        return get_td3_agent()
 
     if agent_alg == 'td3_taylor':
         return get_td3_taylor_agent()
 
-    if agent_alg == 'ddpg':
-        return get_ddpg_agent()
 
     if agent_alg == 'residual_mage':
         return get_residual_Mage_agent()
 
     raise ValueError(f'Unknown agent alg {agent_alg}')
 
-
-@ex.capture
-def get_td3_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
-                  value_lr, policy_n_units, value_n_units, policy_n_layers, value_n_layers, policy_activation,
-                  value_activation, agent_grad_clip, td3_policy_delay, tdg_error_weight, td_error_weight, td3_expl_noise):
-    return TD3(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
-               value_loss=value_loss, policy_lr=policy_lr, value_lr=value_lr,
-               policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
-               policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
-               grad_clip=agent_grad_clip, policy_delay=td3_policy_delay,
-               tdg_error_weight=tdg_error_weight, td_error_weight=td_error_weight, expl_noise=td3_expl_noise)
 
 @ex.capture
 def get_td3_taylor_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
@@ -286,16 +267,6 @@ def get_td3_taylor_agent(*, d_state, d_action, discount, device, value_tau, valu
                grad_clip=agent_grad_clip, policy_delay=td3_policy_delay,
                action_cov=td3_action_cov, grad_state=grad_state, update_order=td3_update_order,state_cov=td3_state_cov,gamma_H=td3_gamma_H,
                expl_noise=td3_expl_noise)
-
-@ex.capture
-def get_ddpg_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
-                   value_lr, policy_n_units, value_n_units, policy_n_layers, value_n_layers, policy_activation,
-                   value_activation, agent_grad_clip, tdg_error_weight, td_error_weight):
-    return DDPG(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
-                value_loss=value_loss, policy_lr=policy_lr, value_lr=value_lr,
-                policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
-                policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
-                grad_clip=agent_grad_clip, tdg_error_weight=tdg_error_weight, td_error_weight=td_error_weight)
 
 @ex.capture
 def get_residual_Mage_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
