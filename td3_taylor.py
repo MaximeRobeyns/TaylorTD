@@ -57,6 +57,7 @@ class TD3_Taylor(nn.Module):
             noise_clip=0.5,
             expl_noise=0.1,
             action_cov=0.1,
+            grad_action=True,
             grad_state=False,
             update_order = 1,
             state_cov=0.1,
@@ -97,6 +98,7 @@ class TD3_Taylor(nn.Module):
 
         self.action_cov = action_cov
         self.grad_state = grad_state
+        self.grad_action = grad_action
         self.update_order = update_order
         self.step_counter = 0
         self.state_cov = state_cov
@@ -181,7 +183,7 @@ class TD3_Taylor(nn.Module):
 
 
 
-        if self.update_order >= 1: # i.e. execute for both the first and second order update
+        if self.grad_action:
                 
                 # Compute the gradient of the TD-error with respect to the action
                 dac1 = torch.autograd.grad(outputs=q1_td_error, inputs=actions,

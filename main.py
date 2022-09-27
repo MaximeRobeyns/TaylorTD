@@ -146,15 +146,17 @@ def policy_arch_config(n_total_steps):
     # Parameters for TD3
     td3_policy_delay = 2
     td3_expl_noise = 0.1
+    grad_action = True
+    grad_state = False                        # Include gradiet of TD-error relative to state
     td3_action_cov = 0.25                            #in Taylor RL (covariance of action points) - 5 works really well (equivalent value to MAGE)
     td3_update_order = 1                            # 1 or 2
     td3_state_cov =0.00001
     td3_gamma_H = 0.1                               # weight on 2-order update
-    
-    
-    grad_state = False                        # Include gradiet of TD-error relative to state
     det_action = True                         # Determines whether Q in model transitions evaluated for deterministic or stochastic policy
-
+    
+    # For MAGE residual:
+    tdg_error_weight = 5.
+    td_error_weight = 1.
 
     data_buffer_size = n_total_steps          # Memory buffer size  
 
@@ -162,7 +164,7 @@ def policy_arch_config(n_total_steps):
 
 # noinspection PyUnusedLocal
 @ex.config
-def infra_config(env_name,agent_alg,run_type,run_number):
+def infra_config(env_name,agent_alg,run_type, grad_action, grad_state, run_number):
     use_cuda = True                                 # if true use CUDA
     gpu_id = 0                                      # ID of GPU to use (by default use GPU 0)
     print_config = True                             # Set False if you don't want that (e.g. for regression tests)
@@ -174,12 +176,21 @@ def infra_config(env_name,agent_alg,run_type,run_number):
     if use_cuda and 'CUDA_VISIBLE_DEVICES' not in os.environ:  # gpu_id is used only if CUDA_VISIBLE_DEVICES was not set
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
     device = torch.device('cuda' if use_cuda and torch.cuda.is_available() else 'cpu')
+    
+    update_dir =''
+
+    if grad_action:
+       update_dir = 'Action' 
+    if grad_state:   
+       update_dir = 'State' + update_dir
+    if update_dir == '':
+       update_dir = 'ZeroOrder'    
 
     self_dir = os.path.dirname(os.path.abspath(__file__))
     dump_dir = '__default__'                        # Set dump_dir=None if you don't want to be create dump_dir
     if dump_dir == '__default__':
     #    dump_dir = os.path.join(self_dir, 'logs', f'{datetime.now().strftime("%Y%m%d%H%M%S")}_{os.getpid()}')
-        dump_dir = os.path.join(self_dir, 'results',f'{env_name}',f'{agent_alg}',f'{run_type}',f'{run_number}') # Add this to save file in specif directory
+        dump_dir = os.path.join(self_dir, 'results',f'{env_name}',f'{agent_alg}',f'{run_type}',update_dir,f'{run_number}') # Add this to save file in specif directory
     if dump_dir is not None:
         os.makedirs(dump_dir, exist_ok=True)
 
@@ -248,14 +259,14 @@ def get_agent(mode, *, agent_alg):
 @ex.capture
 def get_td3_taylor_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
                   value_lr, policy_n_units, value_n_units, policy_n_layers, value_n_layers, policy_activation,
-                  value_activation, agent_grad_clip, td3_policy_delay, td3_action_cov, grad_state, td3_update_order,td3_state_cov,td3_gamma_H,
+                  value_activation, agent_grad_clip, td3_policy_delay, td3_action_cov, grad_action, grad_state, td3_update_order,td3_state_cov,td3_gamma_H,
                   td3_expl_noise):
     return TD3_Taylor(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
                value_loss=value_loss, policy_lr=policy_lr, value_lr=value_lr,
                policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
                policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
                grad_clip=agent_grad_clip, policy_delay=td3_policy_delay,
-               action_cov=td3_action_cov, grad_state=grad_state, update_order=td3_update_order,state_cov=td3_state_cov,gamma_H=td3_gamma_H,
+               action_cov=td3_action_cov, grad_action= grad_action, grad_state=grad_state, update_order=td3_update_order,state_cov=td3_state_cov,gamma_H=td3_gamma_H,
                expl_noise=td3_expl_noise)
 
 @ex.capture
