@@ -120,14 +120,6 @@ class TD3_Taylor(nn.Module):
 
         return actions.clamp(-1, +1)
 
-    def get_action_with_logp(self, states):
-        """Returns action vector, with gradient info???"""
-        states = states.to(self.device)
-        if self.normalizer is not None:
-            states = self.normalizer.normalize_states(states)
-        a = self.actor(states)
-        return a, torch.ones(a.shape[0], device=a.device) * np.inf  # inf: should not be used
-
     def get_action_value(self, states, actions):
         """Returns Q(s, a) by calling the critic."""
         with torch.no_grad():
