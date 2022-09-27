@@ -9,12 +9,11 @@ import numpy as np
 
 
 class MetricLogger:
-    def __init__(self, ex, neptune_ex):
+    def __init__(self, ex):
         self.data = {}  # Dictionary with key=metric_name and value=list of rows
         self.columns = {}  # Dictionary with key=metric_name and value=column names
         self.index = {}  # Dictionary which keeps auto-increments index for some metrics
         self.ex = ex
-        self.neptune_ex = neptune_ex
 
     def add_scalars(self, meta_metric, metric_dict, *, step_i=None, **context_i):
         single_metric = meta_metric is None
@@ -60,8 +59,6 @@ class MetricLogger:
             if auto_increment:  # for observer, each metric will have _ai suffix
                 metric += '_ai'  # ai = auto-increment
 
-            if self.neptune_ex is not None and np.isfinite(value):  # Neptune does not support nans/infs
-                self.neptune_ex.log_metric(metric, x=step_index, y=value)
 
     def add_scalar(self, metric, value, *, step_i=None, **context_i):
         """
@@ -89,14 +86,11 @@ class MetricLogger:
         for df_name, df in self.pandas().items():
             fn_name = Path(dump_dir, df_name.replace('/', '_')).with_suffix('.feather')  # The quickest format according to some internet sources
             df.to_feather(fn_name)
-            if self.neptune_ex is not None:
-                self.neptune_ex.log_artifact(fn_name)
 
     def __getstate__(self):
-        state = dict({k: v for k, v in self.__dict__.items() if k not in ['ex', 'neptune_ex']})
+        state = dict({k: v for k, v in self.__dict__.items() if k not in ['ex']})
         return state
 
     def __setstate__(self, other):
         self.__dict__ = other
-        self.__dict__['neptune_ex'] = None
         self.__dict__['ex'] = None

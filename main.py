@@ -495,6 +495,7 @@ def evaluate_on_task(agent, model, buffer, task, task_name, context, *,  _run,
     """ Evaluate agent or model & agent """
     episode_returns, episode_lengths = [], []
 
+    env_loop = EnvLoop(get_env,run=_run)
     agent = to_deterministic_agent(agent) # This ensures evalutation performance are based on the deterministic (optimal) action 
 
     # Test agent on real environment by running an episode
@@ -518,6 +519,7 @@ def evaluate_on_task(agent, model, buffer, task, task_name, context, *,  _run,
 
 def evaluate_on_tasks(agent, model, buffer, task_name, context):
     logger.info(f"{ex.step_i:6d} | {context} | evaluating model for tasks...")
+    env = get_env()
     task = env.unwrapped.tasks()[task_name]
     env.close()
 

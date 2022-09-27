@@ -107,9 +107,9 @@ class EnvLoop:
             # FIXME: are the view-numel things necessary?
             action = agent.get_action(self.state.view(1, self.state.numel())).to('cpu')
             if self.torch_np_conversion:
-                state, next_state, done = self.step(to_np(action), video_file_suffix=video_file_suffix)
+                state, next_state, done = self.step(to_np(action))
             else:
-                state, next_state, done = self.step(action, video_file_suffix=video_file_suffix)
+                state, next_state, done = self.step(action)
 
             all_old_states.extend(state.view(1, state.numel()))
             all_actions.extend(action.view(1, action.numel()))
