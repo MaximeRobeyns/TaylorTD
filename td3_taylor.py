@@ -178,7 +178,7 @@ class TD3_Taylor(nn.Module):
         
         # Initialise higher order terms to zero
         action_term1 = torch.tensor(0,device=self.device)
-        term_3 = torch.tensor(0,device=self.device)
+        secondOrder_term = torch.tensor(0,device=self.device)
         state_term1 = torch.tensor(0,device=self.device)
 
 
@@ -273,10 +273,10 @@ class TD3_Taylor(nn.Module):
                 trace_H1 = torch.sum(torch.diagonal(Hess1_a2, dim1=1,dim2=2),dim=1, keepdim=True)
                 trace_H2 = torch.sum(torch.diagonal(Hess2_a2, dim1=1,dim2=2),dim=1, keepdim=True)
 
-                term_3 = 0.5 * (loss_fn(trace_H1, zero_targets) + loss_fn(trace_H2, zero_targets))
+                secondOrder_term = 0.5 * (loss_fn(trace_H1, zero_targets) + loss_fn(trace_H2, zero_targets))
                
         
-        critic_loss = term_1 + self.action_cov * action_term1 + self.state_cov * state_term1 + 2 * self.gamma_H * term_3
+        critic_loss = term_1 + self.action_cov * action_term1 + self.state_cov * state_term1 + 2 * self.gamma_H * secondOrder_term
 
         # Optimize the critic
         self.critic_optimizer.zero_grad()

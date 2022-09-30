@@ -147,7 +147,7 @@ def policy_arch_config(n_total_steps):
     td3_policy_delay = 2
     td3_expl_noise = 0.1
     grad_action = True
-    grad_state = False                        # Include gradiet of TD-error relative to state
+    grad_state = True                        # Include gradiet of TD-error relative to state
     td3_action_cov = 0.25                            #in Taylor RL (covariance of action points) - 5 works really well (equivalent value to MAGE)
     td3_update_order = 1                            # 1 or 2
     td3_state_cov =0.00001
