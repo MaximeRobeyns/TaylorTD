@@ -163,7 +163,7 @@ class TD3_Taylor(nn.Module):
         # We apply Taylor Direct / Residual updates with both q1_td_error and q2_td_error.
         # q1_td_error and q2_td_error are O
 
-        critic_loss, td_loss, ag_loss = torch.tensor(0, device=self.device), torch.tensor(0, device=self.device), torch.tensor(0, device=self.device)
+        critic_loss, term_1, action_term1, state_term1, secondOrder_term = torch.tensor(0, device=self.device), torch.tensor(0, device=self.device), torch.tensor(0, device=self.device), torch.tensor(0, device=self.device), torch.tensor(0, device=self.device)
 
 
         if self.value_loss == 'huber':
@@ -176,12 +176,6 @@ class TD3_Taylor(nn.Module):
         # In practice below implements the direct TD-update since have fixed target and each term is squared by loss_fn
         term_1 = 0.5 * (loss_fn(q1_td_error, zero_targets) + loss_fn(q2_td_error, zero_targets))        
         
-        # Initialise higher order terms to zero
-        action_term1 = torch.tensor(0,device=self.device)
-        secondOrder_term = torch.tensor(0,device=self.device)
-        state_term1 = torch.tensor(0,device=self.device)
-
-
 
         if self.grad_action:
                 
@@ -311,7 +305,7 @@ class TD3_Taylor(nn.Module):
         for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
-        return raw_next_actions[0, 0].item(), td_loss.item(), self.action_cov * ag_loss.item(), self.last_actor_loss
+        return raw_next_actions[0, 0].item(), term_1.item(), self.action_cov * action_term1.item(),self.state_cov * state_term1, self.last_actor_loss
 
     @staticmethod
     def catastrophic_divergence(q_loss, pi_loss):

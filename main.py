@@ -375,11 +375,10 @@ class ImaginationTransitionsProvider:
         self.is_done = is_done
         self.imagination.reset()
 
-    def get_training_transitions(self, agent):
-        states, actions, next_states = self.imagination.many_steps(agent) # This returns a batch of initial states and the corresponding "imagined" next states with the actions
-        rewards = self.task(states, actions, next_states)  # Here computes the task reward accessing the true reward function for the task
-        dones = self.is_done(next_states)
-
+    def get_training_transitions(self, agent): 
+        states, actions, next_states = self.imagination.many_steps(agent) # This returns a batch of initial states and the corresponding "imagined" next states with the actions 
+        rewards = self.task(states, actions, next_states)  # Here computes the task reward accessing the true reward function for the task 
+        dones = self.is_done(next_states) 
         return states, actions, next_states, rewards, dones
 
 
@@ -406,7 +405,7 @@ def train_agent(agent, model, reward_model, buffer, task, task_name, is_done, mo
             continue
 
         for img_update_i in range(1, policy_training_n_updates_per_iter + 1):
-            raw_action, q_loss, q_grad_loss, pi_loss = agent.update(states, actions, rewards, next_states, masks=~dones) # Key method call to the critic and actor update
+            raw_action, q_loss, q_grad_loss,_, pi_loss = agent.update(states, actions, rewards, next_states, masks=~dones) # Key method call to the critic and actor update
             # This is rare but can still happen
             if agent.catastrophic_divergence(q_loss, pi_loss):
                 logger.info("Catastrophic divergence detected. Agent reset.")
@@ -650,7 +649,7 @@ class MainTrainingLoop:
 
         behavioral_agent = self.random_agent if ex.step_i <= n_warm_up_steps else self.agent
         with torch.no_grad():
-                action = behavioral_agent.get_action(self.env_loop.state, deterministic=False).to('cpu') # KEY: ensure real transition are sampled based on stochastic policy
+                action = behavioral_agent.get_action(self.env_loop.state, deterministic=False).detach().to('cpu') # KEY: ensure real transition are sampled based on stochastic policy
         # save s
         prev_state = self.env_loop.state.clone().to(device)
 
