@@ -578,7 +578,9 @@ class MainTrainingLoop:
         tmp_env = get_env()
         self.is_done = tmp_env.unwrapped.is_done
         self.eval_tasks = {task_name: tmp_env.tasks()[task_name]}
-        self.exploitation_task = tmp_env.tasks()[task_name]
+        # Below returns the StandardTask obj (i.e. reference to the dict returned by .tasks() with task_name='standard')
+        # StandardTask obj has one __call__ method which computes the rwd, that's why self.exploitation_task computes the rwd
+        self.exploitation_task = tmp_env.tasks()[task_name] 
         del tmp_env
 
         ex.step_i = 0

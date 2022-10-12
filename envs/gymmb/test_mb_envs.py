@@ -56,3 +56,6 @@ class TestEnvironments(unittest.TestCase):
 
     def test_pendulum(self):
         self.any_test('Pendulum-v0', 'GYMMB_Pendulum-v0')
+
+    def test_ant(self):
+        self.any_test('Ant-v2', 'GYMMB_Ant-v2', state_mine_cmp_indices=slice(1,None))

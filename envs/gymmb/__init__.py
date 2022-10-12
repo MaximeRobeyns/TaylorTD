@@ -1,6 +1,13 @@
 from gym.envs.registration import register
 
 register(
+    id='GYMMB_Ant-v2',
+    entry_point='envs.gymmb.ant:GYMMB_Ant',
+    max_episode_steps=1000
+)
+
+
+register(
     id='GYMMB_HalfCheetah-v2',
     entry_point='envs.gymmb.cheetah:GYMMB_HalfCheetah',
     max_episode_steps=1000
