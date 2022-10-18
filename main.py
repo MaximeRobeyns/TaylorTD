@@ -464,10 +464,10 @@ def train_model(model, optimizer, buffer, mode, model_training_n_batches, *, _ru
 @ex.capture
 def reward_model_train_epoch(reward_model, buffer, optimizer, task, model_batch_size, model_training_grad_clip):
     losses = []  # stores loss after each minibatch gradient update
-    for states, actions, state_deltas in buffer.train_batches(ensemble_size=1, batch_size=model_batch_size):
+    for states, actions, rewards, state_deltas in buffer.train_batches_rwd(ensemble_size=1, batch_size=model_batch_size):
         next_states = states + state_deltas
-        states, actions, next_states = states.squeeze(0), actions.squeeze(0), next_states.squeeze(0)
-        rewards = task(states, actions, next_states)
+        states, actions, rewards, next_states = states.squeeze(0), actions.squeeze(0), rewards.squeeze(0), next_states.squeeze(0)
+        #rewards = task(states, actions, next_states)
         optimizer.zero_grad()
         loss = reward_model.loss(states, actions, next_states, rewards)
         losses.append(loss.item())
