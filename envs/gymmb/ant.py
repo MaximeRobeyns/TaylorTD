@@ -26,6 +26,7 @@ class StandardTask(Task):
         forward_rwd = next_states[:,0] 
 
         healthy_rwd = 1
+
         control_cost = 0.5 * actions.pow(2).sum(dim=1)
         contact_forces = torch.clip(states[:,28:],-1.0,1.0) # Default values # Note: not 100% sure, the doc says there are 6 external forces for 14 links
         contact_cost = 5e-4 * contact_forces.pow(2).sum(dim=1)
