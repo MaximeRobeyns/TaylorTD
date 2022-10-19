@@ -35,10 +35,13 @@ class EpisodeStats:
         self.ep_lengths = defaultdict(list)
         self.last_reward = defaultdict(float)
 
-    def add(self, state, action, next_state, done):
+    def add(self, state, action,rwd, next_state, done, compute_rwd=True):
         for task_name, task in self.tasks.items():
             with torch.no_grad():
-                step_reward = task(state, action, next_state).item()
+                if compute_rwd:
+                    step_reward = task(state, action, next_state).item()
+                else:
+                    step_reward = rwd
             self.curr_episode_rewards[task_name].append(step_reward)
             self.last_reward[task_name] = step_reward
             if done:

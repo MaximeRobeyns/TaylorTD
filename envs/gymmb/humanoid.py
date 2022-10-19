@@ -1,16 +1,14 @@
 import numpy as np
-from gym.envs.mujoco import HumanoidEnv
+from gym.envs.mujoco.humanoid import HumanoidEnv
 import torch
 
 from envs.task import Task
 
-# Note: Humanoid only works with train reward
+# Needed to work with MAGE interface
 class StandardTask(Task):
     def __call__(self, states, actions, next_states):
         
         return None
-        
-
 
 
 class GYMMB_Humanoid(HumanoidEnv):
@@ -18,12 +16,12 @@ class GYMMB_Humanoid(HumanoidEnv):
         super().__init__()
     
 
+# Needed to work with MAGE interface
     @staticmethod
     def tasks():
         return dict(standard=StandardTask())
 
-    @staticmethod
+    @staticmethod    
     def is_done(states):
-
-        notdone = (states[:,2] >= 1.0) & (states[:,2] <= 2.0) # This only works if exclude_current_positions_from_observation=False
+        notdone = (states[:,0] > 1.0) & (states[:,0] < 2.0)
         return ~notdone

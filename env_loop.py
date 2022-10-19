@@ -1,3 +1,4 @@
+import numpy as np
 import sys
 import torch
 from utils import to_torch, to_np
@@ -57,10 +58,12 @@ class EnvLoop:
         if self._state is None:
             self._reset()
 
-        next_state, _, done, info = self.env.step(action)
+        next_state, rwd, done, info = self.env.step(action)
+
 
         if self.torch_np_conversion:
             next_state = to_torch(next_state)
+
         old_state = self._state.detach()
         self._state = next_state.detach()  # For more safety (not required, in principle)
         self._step_i += 1
@@ -71,7 +74,7 @@ class EnvLoop:
             self.env.close()
             self._state = None
 
-        return old_state, next_state, done
+        return old_state, rwd, next_state, done
 
     def episode(self, agent):
         return self.multi_step(agent, single_episode=True)
@@ -96,9 +99,11 @@ class EnvLoop:
         """
         assert (n_steps is None) ^ (single_episode is False)
 
+
         all_old_states = []
         all_next_states = []
         all_actions = []
+        all_rwds = []
 
         if single_episode:
             n_steps = sys.maxsize
@@ -107,17 +112,19 @@ class EnvLoop:
             # FIXME: are the view-numel things necessary?
             action = agent.get_action(self.state.view(1, self.state.numel())).to('cpu')
             if self.torch_np_conversion:
-                state, next_state, done = self.step(to_np(action))
+                state, rwd, next_state, done = self.step(to_np(action))
             else:
-                state, next_state, done = self.step(action)
+                state, rwd, next_state, done = self.step(action)
 
             all_old_states.extend(state.view(1, state.numel()))
             all_actions.extend(action.view(1, action.numel()))
             all_next_states.extend(next_state.view(1, next_state.numel()))
+            all_rwds.extend(rwd.reshape((1,rwd.size)))
 
             if single_episode and done:
                 break
-        return torch.stack(all_old_states), torch.stack(all_actions), torch.stack(all_next_states)
+
+        return torch.stack(all_old_states), torch.stack(all_actions), torch.tensor(np.array(all_rwds),device=state.device), torch.stack(all_next_states)
 
     def close(self):
         if self.env is not None:

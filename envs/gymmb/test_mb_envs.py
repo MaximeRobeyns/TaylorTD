@@ -25,7 +25,9 @@ class TestEnvironments(unittest.TestCase):
         # noinspection PyUnresolvedReferences
         env_orig = gym.make(standard_env_name)
         env_orig.seed(SEED)
+        # In humanoid use the actual done condition from the env and not from the wrapper
         env_mine = IsDoneEnv(gym.make(my_env_name))
+
         env_mine.seed(SEED)
         sorig = env_orig.reset()
         smine = env_mine.reset()
@@ -34,8 +36,12 @@ class TestEnvironments(unittest.TestCase):
             action = env_mine.action_space.sample()
             sorig, r1, d1, _ = env_orig.step(action)
             s2_prev = smine.copy()
-            smine, _, d2, _ = env_mine.step(action)
-            r2 = env_mine.unwrapped.tasks()['standard'](to_torch(s2_prev), to_torch(action), to_torch(smine)).item()
+            smine, r2, d2, _ = env_mine.step(action)
+
+            # In Humanoid use actual rwd from the environment not the one given by tasks()
+            if standard_env_name != 'Humanoid-v2':
+                r2 = env_mine.unwrapped.tasks()['standard'](to_torch(s2_prev), to_torch(action), to_torch(smine)).item()
+
             self.assertSequenceEqual(list(sorig[state_orig_cmp_indices]), list(smine[state_mine_cmp_indices]))
             self.assertEqual(d1, d2)
             if not ignore_reward:
@@ -60,3 +66,6 @@ class TestEnvironments(unittest.TestCase):
 
     def test_ant(self):
         self.any_test('Ant-v2', 'GYMMB_Ant-v2', state_mine_cmp_indices=slice(1,None),ignore_reward=True)
+
+    def test_humanoid(self):
+        self.any_test('Humanoid-v2', 'GYMMB_Humanoid-v2' )

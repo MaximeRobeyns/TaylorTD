@@ -1,4 +1,9 @@
 #!/usr/bin/env python
+
+
+# This main is to be used with Humanoid and not with the old MAGE envs due to a change in how the rwd is computed
+# in all MAGE envs the rwd is re-computed based on the task() function, here it relies on the actual observed rwd 
+# from the environment
 import logging
 import warnings
 
@@ -71,7 +76,7 @@ def eval_config():
 # noinspection PyUnusedLocal
 @ex.config
 def env_config(n_total_steps):
-    env_name = 'GYMMB_HalfCheetah-v2'               # environment name: GYMMB_* or Magellan*
+    env_name = 'GYMMB_Humanoid-v2'               # environment name: GYMMB_* or Magellan*
     task_name = 'standard'                          # Name of task to perform within environment e.g. in half cheetah env. either 'running' or 'flipping'  
 
 
@@ -89,8 +94,8 @@ def model_arch_config(env_name):
     model_n_layers = 4                              # number of hidden layers in the model (at least 2)
     model_activation = 'swish'                      # activation function (see models.py for options)
 
-    train_reward = False                            # Whether to train the reward function (True) or use the hand-designed one (False)
-    reward_n_units = 256
+    train_reward = True                            # Whether to train the reward function (True) or use the hand-designed one (False)
+    reward_n_units = 512
     reward_n_layers = 3
     reward_activation = 'swish'
 
@@ -126,14 +131,14 @@ def policy_training_config(env_name):
 @ex.config
 def policy_arch_config(n_total_steps):
     # policy function
-    policy_n_layers = 2                             # number of hidden layers (>=1)
-    policy_n_units = 384                            # number of units in each hidden layer
+    policy_n_layers = 4                             # number of hidden layers (>=1)
+    policy_n_units = 400                            # number of units in each hidden layer
     policy_activation = 'swish'
     policy_lr = 1e-4                                # learning rate
 
     # value function
-    value_n_layers = 2                              # number of hidden layers (>=1)
-    value_n_units = 384                             # number of units in each hidden layer
+    value_n_layers = 4                              # number of hidden layers (>=1)
+    value_n_units = 400                             # number of units in each hidden layer
     value_activation = 'swish'
     value_lr = 1e-4
     value_tau = 0.005                               # soft target network update mixing factor
@@ -225,7 +230,7 @@ def get_env(env_name): #, seed): # REMOVE seed from argument, only added from t
     env = BoundedActionsEnv(env)
 
     # Adds done condition
-    env = IsDoneEnv(env)
+    env = IsDoneEnv(env) # Still need done condition for imagination
     # Allows us to close mujoco better
     env = MuJoCoCloseFixWrapper(env)
        
@@ -512,8 +517,7 @@ def evaluate_on_task(agent, model, buffer, task, task_name, context, *,  _run,
     for ep_i in range(1, n_eval_episodes_per_policy + 1):
 
         with torch.no_grad():
-            states, actions, _, next_states = env_loop.episode(agent)
-            rewards = task(states, actions, next_states)
+            states, actions, rewards,next_states = env_loop.episode(agent)
 
         ep_return = rewards.sum().item()
         ep_len = len(rewards)
@@ -657,12 +661,11 @@ class MainTrainingLoop:
 
 
         # take a step, s, s' p()
-        state, _ , next_state, done = self.env_loop.step(to_np(action))
-        # get reward; r = E(s, a, s')
-        reward = self.exploitation_task(state, action, next_state).item()
+        state, reward, next_state, done = self.env_loop.step(to_np(action))
+
         # add transition to the buffer; (s, a, s', r)
         self.buffer.add(state, action, next_state, torch.from_numpy(np.array([[reward]], dtype=np.float)))
-        self.stats.add(state, action, None ,next_state, done)
+        self.stats.add(state, action, reward, next_state, done, compute_rwd=False)
         if done:
             log_last_episode(self.stats)
 
@@ -671,7 +674,7 @@ class MainTrainingLoop:
             step=ex.step_i,
             done=done,
             action_abs_mean=action.abs().mean().item(),
-            reward=self.exploitation_task(state, action, next_state).item(),
+            reward= reward,
             action_value=self.agent.get_action_value(prev_state, action).item(),
         )
         ex.mlog.add_scalars('main_loop', {**step_stats, **tasks_rewards})
