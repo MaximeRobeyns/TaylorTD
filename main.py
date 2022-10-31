@@ -1,4 +1,9 @@
 #!/usr/bin/env python
+
+
+# This main is to be used with Humanoid and not with the old MAGE envs due to a change in how the rwd is computed
+# in all MAGE envs the rwd is re-computed based on the task() function, here it relies on the actual observed rwd 
+# from the environment
 import logging
 import warnings
 
@@ -32,8 +37,7 @@ import sacred_utils  # For a custom mongodb flag
 from radam import RAdam
 from reward_model import RewardModel
 from td3_taylor import TD3_Taylor
-from Residual_MAGE import Residual_MAGE
-from wrappers import BoundedActionsEnv, IsDoneEnv, MuJoCoCloseFixWrapper, RecordedEnv
+from wrappers import BoundedActionsEnv, IsDoneEnv, MuJoCoCloseFixWrapper
 from buffer import Buffer
 from models import Model
 from normalizer import TransitionNormalizer
@@ -71,7 +75,8 @@ def eval_config():
 # noinspection PyUnusedLocal
 @ex.config
 def env_config(n_total_steps):
-    env_name = 'GYMMB_HalfCheetah-v2'               # environment name: GYMMB_* or Magellan*
+
+    env_name = 'GYMMB_Humanoid-v2'               # environment name: GYMMB_* or Magellan*
     task_name = 'standard'                          # Name of task to perform within environment e.g. in half cheetah env. either 'running' or 'flipping'  
 
 
@@ -89,8 +94,11 @@ def model_arch_config(env_name):
     model_n_layers = 4                              # number of hidden layers in the model (at least 2)
     model_activation = 'swish'                      # activation function (see models.py for options)
 
-    train_reward = False                            # Whether to train the reward function (True) or use the hand-designed one (False)
-    reward_n_units = 256
+    if env_name == 'GYMMB_Humanoid-v2' or env_name == 'GYMMB_Ant-v2':              
+        reward_n_units = 512
+    else:
+        reward_n_units = 256
+
     reward_n_layers = 3
     reward_activation = 'swish'
 
@@ -124,16 +132,23 @@ def policy_training_config(env_name):
 
 # noinspection PyUnusedLocal
 @ex.config
-def policy_arch_config(n_total_steps):
+def policy_arch_config(n_total_steps,env_name):
+
+    if env_name == 'GYMMB_Humanoid-v2' or env_name == 'GYMMB_Ant-v2':                            
+        policy_n_layers = 4
+        value_n_layers = 4
+    else:
+
+        policy_n_layers = 2
+        value_n_layers = 2
+
     # policy function
-    policy_n_layers = 2                             # number of hidden layers (>=1)
-    policy_n_units = 384                            # number of units in each hidden layer
+    policy_n_units = 400                            # number of units in each hidden layer
     policy_activation = 'swish'
     policy_lr = 1e-4                                # learning rate
 
     # value function
-    value_n_layers = 2                              # number of hidden layers (>=1)
-    value_n_units = 384                             # number of units in each hidden layer
+    value_n_units = 400                             # number of units in each hidden layer
     value_activation = 'swish'
     value_lr = 1e-4
     value_tau = 0.005                               # soft target network update mixing factor
@@ -150,13 +165,10 @@ def policy_arch_config(n_total_steps):
     grad_state = True                        # Include gradiet of TD-error relative to state
     td3_action_cov = 0.25                            #in Taylor RL (covariance of action points) - 5 works really well (equivalent value to MAGE)
     td3_update_order = 1                            # 1 or 2
-    td3_state_cov =0.00001
+    td3_state_cov =0.00005
     td3_gamma_H = 0.1                               # weight on 2-order update
     det_action = True                         # Determines whether Q in model transitions evaluated for deterministic or stochastic policy
     
-    # For MAGE residual:
-    tdg_error_weight = 5.
-    td_error_weight = 1.
 
     data_buffer_size = n_total_steps          # Memory buffer size  
 
@@ -225,7 +237,7 @@ def get_env(env_name): #, seed): # REMOVE seed from argument, only added from t
     env = BoundedActionsEnv(env)
 
     # Adds done condition
-    env = IsDoneEnv(env)
+    env = IsDoneEnv(env) # Still need done condition for imagination
     # Allows us to close mujoco better
     env = MuJoCoCloseFixWrapper(env)
        
@@ -250,9 +262,6 @@ def get_agent(mode, *, agent_alg):
         return get_td3_taylor_agent()
 
 
-    if agent_alg == 'residual_mage':
-        return get_residual_Mage_agent()
-
     raise ValueError(f'Unknown agent alg {agent_alg}')
 
 
@@ -268,18 +277,6 @@ def get_td3_taylor_agent(*, d_state, d_action, discount, device, value_tau, valu
                grad_clip=agent_grad_clip, policy_delay=td3_policy_delay,
                action_cov=td3_action_cov, grad_action= grad_action, grad_state=grad_state, update_order=td3_update_order,state_cov=td3_state_cov,gamma_H=td3_gamma_H,
                expl_noise=td3_expl_noise)
-
-@ex.capture
-def get_residual_Mage_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
-                          value_lr, policy_n_units, value_n_units, policy_n_layers, value_n_layers, policy_activation,
-                          value_activation, agent_grad_clip,td3_policy_delay, td3_expl_noise , tdg_error_weight):
-    return Residual_MAGE(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
-                value_loss=value_loss, policy_lr=policy_lr, value_lr=value_lr,
-                policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
-                policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
-                grad_clip=agent_grad_clip, policy_delay=td3_policy_delay,
-               expl_noise=td3_expl_noise, tdg_error_weight=tdg_error_weight)
-
 
 
 
@@ -351,9 +348,8 @@ def get_buffer(d_state, d_action, n_total_steps, normalize_data, device, data_bu
 # computed by the class below ImaginationTransitionsProvider, this class should be used for standard td3 methods, which rely on
 # buffer transitions rather than imaginary ones
 class BufferTransitionsProvider:
-    def __init__(self, buffer, task, is_done, device, policy_actors):
+    def __init__(self, buffer,  is_done, device, policy_actors):
         self.buffer = buffer
-        self.task = task
         self.is_done = is_done
         self.device = device
         self.policy_actors = policy_actors
@@ -362,44 +358,40 @@ class BufferTransitionsProvider:
         states, actions, next_states, _ = self.buffer.view()
         idx = torch.randint(len(self.buffer), size=[self.policy_actors])
         states, actions, next_states = [x[idx].to(self.device) for x in [states, actions, next_states]]
-        rewards = self.task(states, actions, next_states)
         dones = self.is_done(next_states)
-        return states, actions, next_states, rewards, dones
+        return states, actions, next_states, dones
 
 # This class relies on input object imagination to generate an imaginary(predicted) transition (i.e. based on the model)
 # it also relies on input task to compute the true reward give the transition and the task
 class ImaginationTransitionsProvider:
-    def __init__(self, imagination, task, is_done):
+    def __init__(self, imagination, is_done):
         self.imagination = imagination
-        self.task = task
         self.is_done = is_done
         self.imagination.reset()
 
     def get_training_transitions(self, agent): 
         states, actions, next_states = self.imagination.many_steps(agent) # This returns a batch of initial states and the corresponding "imagined" next states with the actions 
-        rewards = self.task(states, actions, next_states)  # Here computes the task reward accessing the true reward function for the task 
         dones = self.is_done(next_states) 
-        return states, actions, next_states, rewards, dones
+        return states, actions, next_states, dones
 
 
 @ex.capture
-def get_training_data_provider(model, buffer, is_done, task):
+def get_training_data_provider(model, buffer, is_done):
     initial_states, _, _, _ = buffer.view() # This returns all inital states so far in the buffer
     imagination = get_imagination(model, initial_states) # Creates an "imagination" obj needed to generate next states through the ImaginationTransitionsProvider 
-    return ImaginationTransitionsProvider(imagination=imagination, task=task, is_done=is_done)
+    return ImaginationTransitionsProvider(imagination=imagination, is_done=is_done)
 
 
 @ex.capture
-def train_agent(agent, model, reward_model, buffer, task, task_name, is_done, mode, context_i, *, _run, device,
-                policy_training_n_updates_per_iter, agent_alg, train_reward, policy_training_n_iters):
+def train_agent(agent, model, reward_model, buffer, task_name, is_done, mode, context_i, *, _run, device,
+                policy_training_n_updates_per_iter, agent_alg, policy_training_n_iters):
     """Policy optimisation step"""
-    data_provider = get_training_data_provider(model, buffer, is_done, task)
+    data_provider = get_training_data_provider(model, buffer, is_done)
 
     q_loss, pi_loss = np.nan, np.nan
     for img_step_i in range(1, policy_training_n_iters + 1):
-        states, actions, next_states, rewards, dones = data_provider.get_training_transitions(agent) # Key method call where get all the RL variables (s,a,r,s',d)
-        if train_reward:
-            rewards = reward_model(states, actions, next_states).squeeze(1)
+        states, actions, next_states, dones = data_provider.get_training_transitions(agent) # Key method call where get all the RL variables (s,a,r,s',d)
+        rewards = reward_model(states, actions, next_states).squeeze(1)
 
         if len(states) == 0:
             continue
@@ -462,12 +454,11 @@ def train_model(model, optimizer, buffer, mode, model_training_n_batches, *, _ru
 
 
 @ex.capture
-def reward_model_train_epoch(reward_model, buffer, optimizer, task, model_batch_size, model_training_grad_clip):
+def reward_model_train_epoch(reward_model, buffer, optimizer, model_batch_size, model_training_grad_clip):
     losses = []  # stores loss after each minibatch gradient update
     for states, actions, rewards, state_deltas in buffer.train_batches_rwd(ensemble_size=1, batch_size=model_batch_size):
         next_states = states + state_deltas
         states, actions, rewards, next_states = states.squeeze(0), actions.squeeze(0), rewards.squeeze(), next_states.squeeze(0)
-        #rewards = task(states, actions, next_states)
         optimizer.zero_grad()
         loss = reward_model.loss(states, actions, next_states, rewards)
         losses.append(loss.item())
@@ -479,14 +470,14 @@ def reward_model_train_epoch(reward_model, buffer, optimizer, task, model_batch_
 
 
 @ex.capture
-def train_reward_model(reward_model, optimizer, buffer, mode, model_training_n_batches, task, *, _run):
+def train_reward_model(reward_model, optimizer, buffer, mode, model_training_n_batches, *, _run):
     logger.debug(f"{ex.step_i:6d} | {mode} | training reward model...")
     n_target_batches = model_training_n_batches
 
     loss = np.nan
     batch_i = 0
     while batch_i < n_target_batches:
-        losses = reward_model_train_epoch(reward_model=reward_model, buffer=buffer, task=task, optimizer=optimizer)
+        losses = reward_model_train_epoch(reward_model=reward_model, buffer=buffer, optimizer=optimizer)
         batch_i += len(losses)
         loss = np.mean(losses)
         logger.log(5, f'{ex.step_i:6d} | {mode} | batch {batch_i:3d} | reward model training loss: {loss:.2f}')
@@ -500,7 +491,7 @@ def train_reward_model(reward_model, optimizer, buffer, mode, model_training_n_b
 
 
 @ex.capture
-def evaluate_on_task(agent, model, buffer, task, task_name, context, *,  _run,
+def evaluate_on_task(agent, model, buffer, task_name, context, *,  _run,
                      n_eval_episodes_per_policy,  dump_dir):
     """ Evaluate agent or model & agent """
     episode_returns, episode_lengths = [], []
@@ -512,8 +503,7 @@ def evaluate_on_task(agent, model, buffer, task, task_name, context, *,  _run,
     for ep_i in range(1, n_eval_episodes_per_policy + 1):
 
         with torch.no_grad():
-            states, actions, _, next_states = env_loop.episode(agent)
-            rewards = task(states, actions, next_states)
+            states, actions, rewards,next_states = env_loop.episode(agent)
 
         ep_return = rewards.sum().item()
         ep_len = len(rewards)
@@ -530,10 +520,9 @@ def evaluate_on_task(agent, model, buffer, task, task_name, context, *,  _run,
 def evaluate_on_tasks(agent, model, buffer, task_name, context):
     logger.info(f"{ex.step_i:6d} | {context} | evaluating model for tasks...")
     env = get_env()
-    task = env.unwrapped.tasks()[task_name]
     env.close()
 
-    ep_returns, ep_lengths = evaluate_on_task(agent, model, buffer, task, task_name, context)
+    ep_returns, ep_lengths = evaluate_on_task(agent, model, buffer, task_name, context)
     avg_ep_return = np.mean(ep_returns)
     std_ep_return = np.std(ep_returns)
     avg_ep_length = np.mean(ep_lengths)
@@ -559,8 +548,7 @@ def timed(func):
 
 
 @ex.capture
-def log_last_episode(stats, *, _run):
-    for task_name, task in stats.tasks.items():
+def log_last_episode(stats,task_name, *, _run):
         last_ep_return = stats.ep_returns[task_name][-1]
         last_ep_len = stats.ep_lengths[task_name][-1]
         logger.info(f'{ex.step_i:6d} | train | t:{task_name} | return: {last_ep_return:5.1f} ({last_ep_len:3d} steps)')
@@ -577,10 +565,8 @@ class MainTrainingLoop:
         
         tmp_env = get_env()
         self.is_done = tmp_env.unwrapped.is_done
-        self.eval_tasks = {task_name: tmp_env.tasks()[task_name]}
         # Below returns the StandardTask obj (i.e. reference to the dict returned by .tasks() with task_name='standard')
         # StandardTask obj has one __call__ method which computes the rwd, that's why self.exploitation_task computes the rwd
-        self.exploitation_task = tmp_env.tasks()[task_name] 
         del tmp_env
 
         ex.step_i = 0
@@ -598,9 +584,10 @@ class MainTrainingLoop:
         self.agent.setup_normalizer(self.buffer.normalizer)
         # computes rewards for each time step in the episode. when episode
         # ends, this logs the total return and episode length
-        self.stats = EpisodeStats(self.eval_tasks)
+        self.stats = EpisodeStats(task_name)
         self.last_avg_eval_score = None
         ex.mlog = None
+        self.task_name = task_name
 
         # Not considered part of the state
         self.new_experiment = True
@@ -643,7 +630,7 @@ class MainTrainingLoop:
     @ex.capture
     def train(self, *, device, n_total_steps, n_warm_up_steps, 
               model_training_freq, policy_training_freq, eval_freq,
-              task_name, model_training_n_batches, train_reward):
+              model_training_n_batches):
 
         self._setup_if_new()
 
@@ -657,21 +644,20 @@ class MainTrainingLoop:
 
 
         # take a step, s, s' p()
-        state, _ , next_state, done = self.env_loop.step(to_np(action))
-        # get reward; r = E(s, a, s')
-        reward = self.exploitation_task(state, action, next_state).item()
+        state, reward, next_state, done = self.env_loop.step(to_np(action))
+
         # add transition to the buffer; (s, a, s', r)
         self.buffer.add(state, action, next_state, torch.from_numpy(np.array([[reward]], dtype=np.float)))
-        self.stats.add(state, action, None ,next_state, done)
+        self.stats.add(state, action, reward, next_state, done)
         if done:
-            log_last_episode(self.stats)
+            log_last_episode(self.stats, self.task_name)
 
-        tasks_rewards = {f'{task_name}': self.stats.get_recent_reward(task_name) for task_name in self.eval_tasks}
+        tasks_rewards = {f'{self.task_name}': self.stats.get_recent_reward()}
         step_stats = dict(
             step=ex.step_i,
             done=done,
             action_abs_mean=action.abs().mean().item(),
-            reward=self.exploitation_task(state, action, next_state).item(),
+            reward= reward,
             action_value=self.agent.get_action_value(prev_state, action).item(),
         )
         ex.mlog.add_scalars('main_loop', {**step_stats, **tasks_rewards})
@@ -685,23 +671,20 @@ class MainTrainingLoop:
             # train_model is the main event.
             #
             timed(train_model)(self.model, self.model_optimizer, self.buffer, mode='train')
-            if train_reward:
-                task = self.exploitation_task
-                timed(train_reward_model)(self.reward_model, self.reward_model_optimizer, self.buffer, mode='train', task=task)
+            timed(train_reward_model)(self.reward_model, self.reward_model_optimizer, self.buffer, mode='train')
 
         # (Re)train the policy using current buffer and model
         if ex.step_i >= n_warm_up_steps and ex.step_i % policy_training_freq == 0:
-            task = self.exploitation_task
             self.agent.setup_normalizer(self.buffer.normalizer)
             #
             # train_agent is the main event.
             #
-            self.agent = timed(train_agent)(self.agent, self.model, self.reward_model, self.buffer, task=task, task_name=task_name, is_done=self.is_done,
+            self.agent = timed(train_agent)(self.agent, self.model, self.reward_model, self.buffer, task_name=self.task_name, is_done=self.is_done,
                                             mode='train', context_i={})
 
         # Evaluate the agent
         if eval_freq is not None and ex.step_i % eval_freq == 0:
-            self.last_avg_eval_score = evaluate_on_tasks(agent=self.agent, model=self.model, buffer=self.buffer, task_name=task_name, context='eval')
+            self.last_avg_eval_score = evaluate_on_tasks(agent=self.agent, model=self.model, buffer=self.buffer, task_name=self.task_name, context='eval')
 
         experiment_finished = ex.step_i >= n_total_steps
         
@@ -721,7 +704,6 @@ class MainTrainingLoop:
                 'Critic_optim': self.agent.critic_optimizer.state_dict(),
                 'Env_model' : self.model.state_dict(),
                 'Env_model_optim': self.model_optimizer.state_dict(),
-                'Train_rwd': train_reward,
                 'Rwd_model': self.reward_model.state_dict(),
                 'Rwd_model_optim': self.reward_model_optimizer.state_dict(),
             }, os.path.join(model_dir,'Model.pt'))

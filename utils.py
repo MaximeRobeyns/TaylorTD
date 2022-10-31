@@ -28,27 +28,23 @@ class EpisodeStats:
         Args:
             tasks: a list of tasks
     """
-    def __init__(self, tasks):
-        self.tasks = tasks
+    def __init__(self, task_name ):
+        self.task_name = task_name
         self.curr_episode_rewards = defaultdict(list)
         self.ep_returns = defaultdict(list)
         self.ep_lengths = defaultdict(list)
         self.last_reward = defaultdict(float)
 
-    def add(self, state, action,rwd, next_state, done, compute_rwd=True):
-        for task_name, task in self.tasks.items():
-            with torch.no_grad():
-                if compute_rwd:
-                    step_reward = task(state, action, next_state).item()
-                else:
-                    step_reward = rwd
-            self.curr_episode_rewards[task_name].append(step_reward)
-            self.last_reward[task_name] = step_reward
-            if done:
-                self.ep_returns[task_name].append(sum(self.curr_episode_rewards[task_name]))
-                self.ep_lengths[task_name].append(len(self.curr_episode_rewards[task_name]))
-                self.curr_episode_rewards[task_name].clear()
+    def add(self, state, action,rwd, next_state, done):
 
-    def get_recent_reward(self, task_name):
-        return self.last_reward[task_name]
+            step_reward = rwd
+            self.curr_episode_rewards[self.task_name].append(step_reward)
+            self.last_reward[self.task_name] = step_reward
+            if done:
+                self.ep_returns[self.task_name].append(sum(self.curr_episode_rewards[self.task_name]))
+                self.ep_lengths[self.task_name].append(len(self.curr_episode_rewards[self.task_name]))
+                self.curr_episode_rewards[self.task_name].clear()
+
+    def get_recent_reward(self):
+        return self.last_reward[self.task_name]
 
