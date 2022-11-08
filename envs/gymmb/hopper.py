@@ -3,7 +3,6 @@ import torch
 
 class GYMMB_Hopper(HopperEnv):
     def __init__(self):
-        self.prev = None
         super().__init__()
 
     @staticmethod
