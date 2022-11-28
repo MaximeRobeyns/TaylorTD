@@ -61,7 +61,8 @@ class TD3_Taylor(nn.Module):
             grad_state=False,
             update_order = 1,
             state_cov=0.1,
-            gamma_H=0.1
+            gamma_H=0.1,
+            norm_grad_terms=True
     ):
         super().__init__()
 
@@ -103,6 +104,7 @@ class TD3_Taylor(nn.Module):
         self.step_counter = 0
         self.state_cov = state_cov
         self.gamma_H = gamma_H
+        self.norm_grad_terms = norm_grad_terms
 
     def setup_normalizer(self, normalizer):
         self.normalizer = copy.deepcopy(normalizer)
@@ -203,9 +205,11 @@ class TD3_Taylor(nn.Module):
                                            only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
                  
                 # KEY: need to change its sign as passed to  gradient descent not ascent:
-                #action_term1 = -1 * ( torch.mean(inner_product_last_dim(dac1.detach(),dQa1)) + torch.mean(inner_product_last_dim(dac2.detach(),dQa2)))
-                action_term1 = -1 * ( torch.mean(inner_product_last_dim(dac1.detach(),dQa1)/(dac1.detach().norm(dim=1, keepdim=True) * dQa1.detach().norm(dim=1, keepdim=True)))
-                               + torch.mean(inner_product_last_dim(dac2.detach(),dQa2)/(dac2.detach().norm(dim=1, keepdim=True) * dQa2.detach().norm(dim=1, keepdim=True))))
+                if not self.norm_grad_terms: 
+                    action_term1 = -1 * ( torch.mean(inner_product_last_dim(dac1.detach(),dQa1)) + torch.mean(inner_product_last_dim(dac2.detach(),dQa2)))
+                else:
+                    action_term1 = -1 * ( torch.mean(inner_product_last_dim(dac1.detach(),dQa1)/(dac1.detach().norm(dim=1, keepdim=True) * dQa1.detach().norm(dim=1, keepdim=True)))
+                    + torch.mean(inner_product_last_dim(dac2.detach(),dQa2)/(dac2.detach().norm(dim=1, keepdim=True) * dQa2.detach().norm(dim=1, keepdim=True))))
 
         # Compute gradient of TD relatice to the state
         # NOTE: for this to work, had to change the SingleStepImagination class and add an option to require the gradient of the state before the actions are computed
@@ -236,10 +240,12 @@ class TD3_Taylor(nn.Module):
                                            only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
                  
                 # KEY: need to change its sign as passed to  gradient descent not ascent:
-                #state_term1 = -1 * ( torch.mean(inner_product_last_dim(dsc1.detach(),dQs1)) + torch.mean(inner_product_last_dim(dsc2.detach(),dQs2)))
-                
-                state_term1 = -1 * ( torch.mean(inner_product_last_dim(dsc1.detach(),dQs1)/(dsc1.detach().norm(dim=1, keepdim=True) * dQs1.detach().norm(dim=1, keepdim=True)))
-                                + torch.mean(inner_product_last_dim(dsc2.detach(),dQs2)/(dsc2.detach().norm(dim=1, keepdim=True) * dQs2.detach().norm(dim=1, keepdim=True))))
+                if not self.norm_grad_terms: 
+                    state_term1 = -1 * ( torch.mean(inner_product_last_dim(dsc1.detach(),dQs1)) + torch.mean(inner_product_last_dim(dsc2.detach(),dQs2)))
+
+                else:
+                    state_term1 = -1 * ( torch.mean(inner_product_last_dim(dsc1.detach(),dQs1)/(dsc1.detach().norm(dim=1, keepdim=True) * dQs1.detach().norm(dim=1, keepdim=True)))
+                    + torch.mean(inner_product_last_dim(dsc2.detach(),dQs2)/(dsc2.detach().norm(dim=1, keepdim=True) * dQs2.detach().norm(dim=1, keepdim=True))))
 
     
         # NOTE: Need to change this into a direct 2nd order update, at the moment it is for the residual

@@ -27,7 +27,6 @@ class SingleStepImagination:
         if self.grad_state:
                 states = states.detach().requires_grad_() # create an alias of states which share data, but requires_grad, in this way we are not changing the grad flag of data stored in the buffer
 
-
         actions = agent.get_action(states, deterministic= self.det_action) # here can explore over actions to learn Q  with deterministic=False or take the det_action with no exploration over action
 
         
