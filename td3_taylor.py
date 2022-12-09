@@ -56,11 +56,12 @@ class TD3_Taylor(nn.Module):
             policy_noise=0.2,
             noise_clip=0.5,
             expl_noise=0.1,
-            action_cov=0,
+            action_cov=0.1,
             grad_action=True,
-            grad_state=True,
+            grad_state=False,
             update_order = 1,
-            state_cov=0,
+            state_cov=0.1,
+            gamma_H=0.1,
             norm_grad_terms=True
     ):
         super().__init__()
@@ -96,14 +97,12 @@ class TD3_Taylor(nn.Module):
         self.device = device
         self.last_actor_loss = 0
 
-        # Initialise mean with values in an approapriate range
-        self.action_mean =  torch.clip(torch.randn(1,d_action, device=device),0,1) 
-        self.state_mean =  torch.clip(torch.randn(1,d_state, device=device) ,0,1)
-
+        self.action_cov = action_cov
+        self.grad_state = grad_state
         self.grad_action = grad_action
         self.update_order = update_order
         self.step_counter = 0
-        self.grad_state = grad_state
+        self.state_cov = state_cov
         self.norm_grad_terms = norm_grad_terms
 
     def setup_normalizer(self, normalizer):
@@ -165,8 +164,7 @@ class TD3_Taylor(nn.Module):
         # We apply Taylor Direct / Residual updates with both q1_td_error and q2_td_error.
         # q1_td_error and q2_td_error are O
 
-        term_1, action_term1, state_term1 = torch.tensor(0, device=self.device), torch.tensor(0, device=self.device), torch.tensor(0, device=self.device)
-
+         term_1, action_term1, state_term1 =   torch.tensor(0, device=self.device), torch.tensor(0, device=self.device), torch.tensor(0, device=self.device)
 
 
         if self.value_loss == 'huber':
@@ -178,21 +176,7 @@ class TD3_Taylor(nn.Module):
         
         # In practice below implements the direct TD-update since have fixed target and each term is squared by loss_fn
         term_1 = 0.5 * (loss_fn(q1_td_error, zero_targets) + loss_fn(q2_td_error, zero_targets))        
-
-        # ------ Compute action and state Taylor covariance based on the variance of actions and states -----------
         
-        action_var = torch.mean((actions.detach() - self.action_mean)**2, dim=0,keepdim=True) 
-        state_var = torch.mean((states.detach() - self.state_mean)**2, dim=0,keepdim=True)
-        
-
-        # Update running average used to compute variance
-
-        self.action_mean += 0.1 + (actions.detach().mean(dim=0,keepdim=True) - self.action_mean)
-        self.state_mean += 0.1 + (states.detach().mean(dim=0,keepdim=True) - self.state_mean)
-
-        # --------------------------------------------------------------------------------------------------
-
-       
 
         if self.grad_action:
                 
@@ -220,21 +204,16 @@ class TD3_Taylor(nn.Module):
                                            only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
                  
                 # KEY: need to change its sign as passed to  gradient descent not ascent:
-                #if not self.norm_grad_terms: 
-                #    action_term1 = -1 * ( torch.mean(inner_product_last_dim(dac1.detach(),dQa1)) + torch.mean(inner_product_last_dim(dac2.detach(),dQa2)))
-                #else:
-                #    action_term1 = -1 * ( torch.mean(inner_product_last_dim(dac1.detach(),dQa1)/(dac1.detach().norm(dim=1, keepdim=True) * dQa1.detach().norm(dim=1, keepdim=True)))
-                #    + torch.mean(inner_product_last_dim(dac2.detach(),dQa2)/(dac2.detach().norm(dim=1, keepdim=True) * dQa2.detach().norm(dim=1, keepdim=True))))
-
-                #action_term1 = -1 * ( torch.mean(inner_product_last_dim(dac1.detach(),dQa1)) + torch.mean(inner_product_last_dim(dac2.detach(),dQa2)))
-
-                dac_dQa_1 = inner_product_last_dim(dac1.detach() * action_var,dQa1)
-                dac_dQa_2 = inner_product_last_dim(dac2.detach() * action_var,dQa2)
-                action_term1 = torch.mean(dac_dQa_1) + torch.mean(dac_dQa_1)
+                if not self.norm_grad_terms: 
+                    action_term1 = -1 * ( torch.mean(inner_product_last_dim(dac1.detach(),dQa1)) + torch.mean(inner_product_last_dim(dac2.detach(),dQa2)))
+                else:
+                    action_term1 = -1 * ( torch.mean(inner_product_last_dim(dac1.detach(),dQa1)/(dac1.detach().norm(dim=1, keepdim=True) * dQa1.detach().norm(dim=1, keepdim=True)))
+                    + torch.mean(inner_product_last_dim(dac2.detach(),dQa2)/(dac2.detach().norm(dim=1, keepdim=True) * dQa2.detach().norm(dim=1, keepdim=True))))
 
         # Compute gradient of TD relatice to the state
         # NOTE: for this to work, had to change the SingleStepImagination class and add an option to require the gradient of the state before the actions are computed
         # because when differentiate relative to the state, the action at the current state is a function of it
+        # NOTE: Need to chenge this into a direct update! (at the moment is for the residual update)
         if self.grad_state:
 
                 # Compute the gradient of the TD-error with respect to the state 
@@ -260,24 +239,16 @@ class TD3_Taylor(nn.Module):
                                            only_inputs=True)[0].flatten(start_dim=1)#.norm(dim=1, keepdim=True)
                  
                 # KEY: need to change its sign as passed to  gradient descent not ascent:
-                #if not self.norm_grad_terms: 
-                #    state_term1 = -1 * ( torch.mean(inner_product_last_dim(dsc1.detach(),dQs1)) + torch.mean(inner_product_last_dim(dsc2.detach(),dQs2)))
+                if not self.norm_grad_terms: 
+                    state_term1 = -1 * ( torch.mean(inner_product_last_dim(dsc1.detach(),dQs1)) + torch.mean(inner_product_last_dim(dsc2.detach(),dQs2)))
 
-                #else:
-                #    state_term1 = -1 * ( torch.mean(inner_product_last_dim(dsc1.detach(),dQs1)/(dsc1.detach().norm(dim=1, keepdim=True) * dQs1.detach().norm(dim=1, keepdim=True)))
-                #    + torch.mean(inner_product_last_dim(dsc2.detach(),dQs2)/(dsc2.detach().norm(dim=1, keepdim=True) * dQs2.detach().norm(dim=1, keepdim=True))))
+                else:
+                    state_term1 = -1 * ( torch.mean(inner_product_last_dim(dsc1.detach(),dQs1)/(dsc1.detach().norm(dim=1, keepdim=True) * dQs1.detach().norm(dim=1, keepdim=True)))
+                    + torch.mean(inner_product_last_dim(dsc2.detach(),dQs2)/(dsc2.detach().norm(dim=1, keepdim=True) * dQs2.detach().norm(dim=1, keepdim=True))))
 
-
-                #state_term1 = -1 * ( torch.mean(inner_product_last_dim(dsc1.detach(),dQs1)) + torch.mean(inner_product_last_dim(dsc2.detach(),dQs2)))
     
-                dsc_dQs_1 = inner_product_last_dim(dsc1.detach() *  0.00001 * state_var,dQs1)
-                dsc_dQs_2 = inner_product_last_dim(dsc2.detach() *  0.00001 * state_var,dQs2)
-
-                state_term1 = torch.mean(dsc_dQs_1) + torch.mean(dsc_dQs_1) 
-
-
-        #critic_loss = term_1 + self.action_cov * action_term1 + self.state_cov * state_term1
-        critic_loss = term_1 - action_term1 -  state_term1
+               
+        critic_loss = term_1 + self.action_cov * action_term1 + self.state_cov * state_term1 
 
         # Optimize the critic
         self.critic_optimizer.zero_grad()
@@ -285,11 +256,6 @@ class TD3_Taylor(nn.Module):
         torch.nn.utils.clip_grad_value_(self.critic.parameters(), self.grad_clip)
         self.critic_optimizer.step()
 
-
-        if self.step_counter % 20000 ==0:
-            print("counter ", self.step_counter)
-            print('action variance: ', action_var)
-            print('state variance: ', state_var, '\n')
 
         if self.step_counter % self.policy_delay == 0:
             
@@ -317,7 +283,7 @@ class TD3_Taylor(nn.Module):
         for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
-        return raw_next_actions[0, 0].item(), term_1.item(), None , None, self.last_actor_loss
+        return raw_next_actions[0, 0].item(), term_1.item(), self.action_cov * action_term1.item(),self.state_cov * state_term1, self.last_actor_loss
 
     @staticmethod
     def catastrophic_divergence(q_loss, pi_loss):

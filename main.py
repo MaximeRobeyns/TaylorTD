@@ -166,6 +166,7 @@ def policy_arch_config(n_total_steps,env_name):
     td3_action_cov = 0.25                            #in Taylor RL (covariance of action points) - 5 works really well (equivalent value to MAGE)
     td3_update_order = 1                            # 1 or 2
     td3_state_cov =0.00005
+    td3_gamma_H = 0.1                               # weight on 2-order update
     det_action = True                         # Determines whether Q in model transitions evaluated for deterministic or stochastic policy
     norm_grad_terms =True
     
@@ -268,14 +269,14 @@ def get_agent(mode, *, agent_alg):
 @ex.capture
 def get_td3_taylor_agent(*, d_state, d_action, discount, device, value_tau, value_loss, policy_lr,
                   value_lr, policy_n_units, value_n_units, policy_n_layers, value_n_layers, policy_activation,
-                  value_activation, agent_grad_clip, td3_policy_delay, td3_action_cov, grad_action, grad_state, td3_update_order,td3_state_cov,
+                  value_activation, agent_grad_clip, td3_policy_delay, td3_action_cov, grad_action, grad_state, td3_update_order,td3_state_cov,td3_gamma_H,
                   td3_expl_noise,norm_grad_terms):
     return TD3_Taylor(d_state=d_state, d_action=d_action, device=device, gamma=discount, tau=value_tau,
                value_loss=value_loss, policy_lr=policy_lr, value_lr=value_lr,
                policy_n_layers=policy_n_layers, value_n_layers=value_n_layers, value_n_units=value_n_units,
                policy_n_units=policy_n_units, policy_activation=policy_activation, value_activation=value_activation,
                grad_clip=agent_grad_clip, policy_delay=td3_policy_delay,
-               action_cov=td3_action_cov, grad_action= grad_action, grad_state=grad_state, update_order=td3_update_order,state_cov=td3_state_cov,
+               action_cov=td3_action_cov, grad_action= grad_action, grad_state=grad_state, update_order=td3_update_order,state_cov=td3_state_cov,gamma_H=td3_gamma_H,
                expl_noise=td3_expl_noise,  norm_grad_terms=norm_grad_terms)
 
 
