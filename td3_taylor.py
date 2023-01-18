@@ -61,7 +61,6 @@ class TD3_Taylor(nn.Module):
             grad_state=False,
             update_order = 1,
             state_cov=0.1,
-            gamma_H=0.1,
             norm_grad_terms=True
     ):
         super().__init__()
@@ -164,7 +163,7 @@ class TD3_Taylor(nn.Module):
         # We apply Taylor Direct / Residual updates with both q1_td_error and q2_td_error.
         # q1_td_error and q2_td_error are O
 
-         term_1, action_term1, state_term1 =   torch.tensor(0, device=self.device), torch.tensor(0, device=self.device), torch.tensor(0, device=self.device)
+        term_1, action_term1, state_term1 =   torch.tensor(0, device=self.device), torch.tensor(0, device=self.device), torch.tensor(0, device=self.device)
 
 
         if self.value_loss == 'huber':
