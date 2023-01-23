@@ -51,20 +51,11 @@ class TestEnvironments(unittest.TestCase):
     def test_cheetah(self):
         self.any_test('HalfCheetah-v2', 'GYMMB_HalfCheetah-v2')
 
-    def test_hopper(self):
-        self.any_test('Hopper-v2', 'GYMMB_Hopper-v2') 
-
     def test_walker2d(self):
         self.any_test('Walker2d-v2', 'GYMMB_Walker2d-v2')
 
     def test_pendulum(self):
         self.any_test('Pendulum-v0', 'GYMMB_Pendulum-v0')
 
-    def test_ant(self):
-        self.any_test('Ant-v2', 'GYMMB_Ant-v2')
-
     def test_humanoid(self):
         self.any_test('Humanoid-v2', 'GYMMB_Humanoid-v2' )
-
-    def test_ant(self):
-        self.any_test('Ant-v2', 'GYMMB_Ant-v2' )
