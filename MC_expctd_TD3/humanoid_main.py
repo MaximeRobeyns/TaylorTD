@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 
-# This main is to be used with Humanoid and not with the old MAGE envs due to a change in how the rwd is computed
-# in all MAGE envs the rwd is re-computed based on the task() function, here it relies on the actual observed rwd 
+# This main is to be used with Humanoid and not with the old envs due to a change in how the rwd is computed
+# in all old envs the rwd is re-computed based on the task() function, here it relies on the actual observed rwd 
 # from the environment
 import logging
 import warnings
