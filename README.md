@@ -1,6 +1,6 @@
 # TaylorRL
 
-This repository is heavily based (but not forked) from [MAGE](https://github.com/nnaisense/MAGE): Model-based Action-Gradient-Estimator Policy Optimization ([paper](https://arxiv.org/abs/2004.14309)).
+Providing a lower variance TD updates through a first-order Taylor expansion of an TD update.
 
 # Installation Instructions
 
@@ -88,5 +88,5 @@ pip install gym[all]
 And any other python packages required:
 
 ``` sh
-pip install dotmap sacred neptune-client
+pip install dotmap sacred
 ```
