@@ -124,6 +124,49 @@ class Buffer:
 
             yield states, actions, state_deltas
 
+    def train_batches_rwd(self, ensemble_size, batch_size):
+        """
+        return an iterator of batches to train the reward model (using rewards stored in the buffer)
+
+        Args:
+            batch_size: number of samples to be returned
+            ensemble_size: size of the ensemble
+
+        Returns:
+            state of size (ensemble_size, n_samples, d_state)
+            action of size (ensemble_size, n_samples, d_action)
+            next state of size (ensemble_size, n_samples, d_state)
+        """
+        num = len(self)
+        indices = [np.random.permutation(range(num)) for _ in range(ensemble_size)]
+        indices = np.stack(indices)
+
+        for i in range(0, num, batch_size):
+            j = min(num, i + batch_size)
+
+            if (j - i) < batch_size and i != 0:
+                # drop the last incomplete batch
+                return
+
+            batch_size = j - i
+
+            batch_indices = indices[:, i:j]
+            batch_indices = batch_indices.flatten()
+
+            states = self.states[batch_indices]
+            actions = self.actions[batch_indices]
+            state_deltas = self.state_deltas[batch_indices]
+            rewards = self.rewards[batch_indices]
+
+            states = states.reshape(ensemble_size, batch_size, self.d_state)
+            actions = actions.reshape(ensemble_size, batch_size, self.d_action)
+            state_deltas = state_deltas.reshape(ensemble_size, batch_size, self.d_state)
+            rewards = rewards.reshape(ensemble_size, batch_size, 1)
+
+            yield states, actions, rewards, state_deltas
+
+
+
     def __len__(self):
         return self.size if self.is_full else self.ptr
 

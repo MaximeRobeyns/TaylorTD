@@ -1,6 +1,13 @@
 from gym.envs.registration import register
 
 register(
+    id='GYMMB_Humanoid-v2',
+    entry_point='envs.gymmb.humanoid:GYMMB_Humanoid',
+    max_episode_steps=1000
+)
+
+
+register(
     id='GYMMB_HalfCheetah-v2',
     entry_point='envs.gymmb.cheetah:GYMMB_HalfCheetah',
     max_episode_steps=1000
@@ -13,11 +20,6 @@ register(
     reward_threshold=0.0,
 )
 
-register(
-    id='GYMMB_Hopper-v2',
-    entry_point='envs.gymmb.hopper:GYMMB_Hopper',
-    max_episode_steps=1000
-)
 
 register(
     id='GYMMB_Walker2d-v2',
@@ -25,11 +27,6 @@ register(
     max_episode_steps=1000
 )
 
-register(
-    id='GYMMB_Swimmer-v2',
-    entry_point='envs.gymmb.swimmer:GYMMB_Swimmer',
-    max_episode_steps=1000
-)
 
 register(
     id='GYMMB_Pendulum-v0',
@@ -37,11 +34,6 @@ register(
     max_episode_steps=200
 )
 
-register(
-    id='GYMMB_CartPole-v1',
-    entry_point='envs.gymmb.cartpole:GYMMB_ContinuousCartPole',
-    max_episode_steps=500
-)
 
 register(
     id='GYMMB_Test-v0',

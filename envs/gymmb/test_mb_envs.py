@@ -25,7 +25,9 @@ class TestEnvironments(unittest.TestCase):
         # noinspection PyUnresolvedReferences
         env_orig = gym.make(standard_env_name)
         env_orig.seed(SEED)
+        # In humanoid use the actual done condition from the env and not from the wrapper
         env_mine = IsDoneEnv(gym.make(my_env_name))
+
         env_mine.seed(SEED)
         sorig = env_orig.reset()
         smine = env_mine.reset()
@@ -34,8 +36,8 @@ class TestEnvironments(unittest.TestCase):
             action = env_mine.action_space.sample()
             sorig, r1, d1, _ = env_orig.step(action)
             s2_prev = smine.copy()
-            smine, _, d2, _ = env_mine.step(action)
-            r2 = env_mine.unwrapped.tasks()['standard'](to_torch(s2_prev), to_torch(action), to_torch(smine)).item()
+            smine, r2, d2, _ = env_mine.step(action)
+
             self.assertSequenceEqual(list(sorig[state_orig_cmp_indices]), list(smine[state_mine_cmp_indices]))
             self.assertEqual(d1, d2)
             if not ignore_reward:
@@ -45,14 +47,15 @@ class TestEnvironments(unittest.TestCase):
                 smine = env_mine.reset()
                 self.assertSequenceEqual(list(sorig[state_orig_cmp_indices]), list(smine[state_mine_cmp_indices]))
 
-    def test_cheetah(self):
-        self.any_test('HalfCheetah-v2', 'GYMMB_HalfCheetah-v2', state_mine_cmp_indices=slice(1, None))
 
-    def test_hopper(self):
-        self.any_test('Hopper-v2', 'GYMMB_Hopper-v2', state_mine_cmp_indices=slice(1, None))
+    def test_cheetah(self):
+        self.any_test('HalfCheetah-v2', 'GYMMB_HalfCheetah-v2')
 
     def test_walker2d(self):
-        self.any_test('Walker2d-v2', 'GYMMB_Walker2d-v2', state_mine_cmp_indices=slice(1, None))
+        self.any_test('Walker2d-v2', 'GYMMB_Walker2d-v2')
 
     def test_pendulum(self):
         self.any_test('Pendulum-v0', 'GYMMB_Pendulum-v0')
+
+    def test_humanoid(self):
+        self.any_test('Humanoid-v2', 'GYMMB_Humanoid-v2' )

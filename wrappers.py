@@ -33,38 +33,6 @@ class BoundedActionsEnv(gym.Wrapper):
         return observation, reward, done, info
 
 
-class RecordedEnv(gym.Wrapper):
-    def __init__(self, env):
-        super().__init__(env)
-        self.start_of_episode = None
-
-    def reset(self):
-        self.start_of_episode = True
-        return self.env.reset()
-
-    def step(self, action, filename='', record_episode=False):
-        if record_episode and self.start_of_episode:
-            self.recorder = VideoRecorder(self.env, path=filename)
-        self.start_of_episode = False
-
-        if hasattr(self, 'recorder'):
-            self.recorder.capture_frame()
-
-        next_state, reward, done, info = self.env.step(action)
-        if hasattr(self, 'recorder') and done:
-            self.recorder.close()  # close and save video at end of episode
-            del self.recorder
-
-        return next_state, reward, done, info
-
-    def close(self):
-        if hasattr(self, 'recorder'):
-            self.recorder.capture_frame()
-            self.recorder.close()
-            del self.recorder
-        self.start_of_episode = True
-        return self.env.close()
-
 
 class IsDoneEnv(gym.Wrapper):
     """

@@ -1,35 +1,43 @@
 import copy
 import torch
+import logging
 import torch.nn as nn
 import torch.nn.functional as F
 
 from ddpg import Actor
-from models import ParallelLinear, get_activation
+from models import get_activation
 from radam import RAdam
 import numpy as np
 
+logger = logging.getLogger(__file__)
 
 class ActionValueFunction(nn.Module):
     def __init__(self, d_state, d_action, n_layers, n_units, activation):
         super().__init__()
+        assert n_layers >=1, "# of hidden layers"
+        
+        # Create the input layer with the correspeonding activation function
+        layers = [nn.Linear(d_state + d_action, n_units), get_activation(activation)]
+        
+        # Add n hidden layers
+        for lyr_idx in range(1, n_layers):
+            layers += [nn.Linear(n_units, n_units), get_activation(activation)]
 
-        if n_layers == 0:
-            # Use linear q function
-            self.layers = ParallelLinear(d_state + d_action, 1, ensemble_size=2)
-        else:
-            layers = [ParallelLinear(d_state + d_action, n_units, ensemble_size=2), get_activation(activation)]
-            for lyr_idx in range(1, n_layers):
-                layers += [ParallelLinear(n_units, n_units, ensemble_size=2), get_activation(activation)]
-            layers += [ParallelLinear(n_units, 1, ensemble_size=2)]
-            self.layers = nn.Sequential(*layers)
+        # Add the output layer    
+        layers += [nn.Linear(n_units, 1)]
+
+        # Pass the layers to torch API, nn.Sequential
+        self.layers = nn.Sequential(*layers)
 
     def forward(self, state, action):
         x = torch.cat([state, action], dim=1)
-        x = x.unsqueeze(0).repeat(2, 1, 1)
         return self.layers(x)
 
 
-class TD3(nn.Module):
+def inner_product_last_dim(A: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
+    return (A.unsqueeze(-2)@B.unsqueeze(-1)).squeeze(-1)
+
+class Residual_MAGE(nn.Module):
     def __init__(
             self,
             d_state,
@@ -51,8 +59,7 @@ class TD3(nn.Module):
             policy_noise=0.2,
             noise_clip=0.5,
             expl_noise=0.1,
-            tdg_error_weight=0,
-            td_error_weight=1,
+            tdg_error_weight=0
     ):
         super().__init__()
 
@@ -64,14 +71,11 @@ class TD3(nn.Module):
         # Optimisation algorithm for the actor.
         self.actor_optimizer = RAdam(self.actor.parameters(), lr=policy_lr)
 
-        # Create teh critic; similarly to the actor, this is just an MLP.
+        # Create the critic; similarly to the actor, this is just an MLP.
         self.critic = ActionValueFunction(d_state, d_action, value_n_layers, value_n_units, value_activation).to(device)
-        # Frozen version of the critic network
-        self.critic_target = copy.deepcopy(self.critic)
         # Critic activation function
         self.critic_optimizer = RAdam(self.critic.parameters(), lr=value_lr)
 
-        # γ term
         self.discount = gamma
         # soft target network update mixing factor
         self.tau = tau
@@ -87,10 +91,9 @@ class TD3(nn.Module):
         self.grad_clip = grad_clip
         self.device = device
         self.last_actor_loss = 0
-
-        self.tdg_error_weight = tdg_error_weight
-        self.td_error_weight = td_error_weight
         self.step_counter = 0
+        self.tdg_error_weight = tdg_error_weight
+
 
     def setup_normalizer(self, normalizer):
         self.normalizer = copy.deepcopy(normalizer)
@@ -134,47 +137,57 @@ class TD3(nn.Module):
         ## Noise-corrupted action vector:
         # Select action according to policy and add clipped noise
         # This is the standard TD3 action-selection procedure
-        noise = (
-                torch.randn_like(actions) * self.policy_noise
-        ).clamp(-self.noise_clip, self.noise_clip)
+        #noise = (
+        #        torch.randn_like(actions) * self.policy_noise
+        #).clamp(-self.noise_clip, self.noise_clip)
         # frozen next action vector
-        raw_next_actions = self.actor_target(next_states)
-        next_actions = (raw_next_actions + noise).clamp(-1, 1)
 
-        # Compute the target Q value
-        next_Q1, next_Q2 = self.critic_target(next_states, next_actions)
-        next_Q = torch.min(next_Q1, next_Q2)
+        raw_next_actions = self.actor(next_states) #self.actor_target(next_states)
+        next_actions = raw_next_actions #(raw_next_actions + noise).clamp(-1, 1) # Note for Residual want next action to be correct one, not noisy version, and not Traget pol?
+        
+        # compute the target Q value depending on the update
+        
+        next_Q = self.critic(next_states, next_actions) # both next_s and next_a carry a gradient, which should relate them to action
         q_target = rewards.unsqueeze(1) + self.discount * masks.float().unsqueeze(1) * next_Q
         zero_targets = torch.zeros_like(q_target, device=self.device)
 
         # Get current Q estimates; multiple values due to TD3
-        q1, q2 = self.critic(states, actions)
-        q1_td_error, q2_td_error = q_target - q1, q_target - q2
+        q = self.critic(states, actions)
+        q_td_error = q_target - q
+
+        # We apply Taylor Direct / Residual updates with both q1_td_error and q2_td_error.
+        # q1_td_error and q2_td_error are O
 
         critic_loss, standard_loss, gradient_loss = torch.tensor(0, device=self.device), torch.tensor(0, device=self.device), torch.tensor(0, device=self.device)
-        if self.td_error_weight != 0:
-            # Compute standard critic loss
-            if self.value_loss == 'huber':
-                standard_loss = 0.5 * (F.smooth_l1_loss(q1_td_error, zero_targets) + F.smooth_l1_loss(q2_td_error, zero_targets))
-            elif self.value_loss == 'mse':
-                standard_loss = 0.5 * (F.mse_loss(q1_td_error, zero_targets) + F.mse_loss(q2_td_error, zero_targets))
-            critic_loss = critic_loss + self.td_error_weight * standard_loss
-        if self.tdg_error_weight != 0:
-            # Compute gradient critic loss
-            gradients_error_norms1 = torch.autograd.grad(outputs=q1_td_error, inputs=actions,
-                                                         grad_outputs=torch.ones(q1_td_error.size(), device=self.device),
-                                                         retain_graph=True, create_graph=True,
-                                                         only_inputs=True)[0].flatten(start_dim=1).norm(dim=1, keepdim=True)
-            gradients_error_norms2 = torch.autograd.grad(outputs=q2_td_error, inputs=actions,
-                                                         grad_outputs=torch.ones(q2_td_error.size(), device=self.device),
-                                                         retain_graph=True, create_graph=True,
-                                                         only_inputs=True)[0].flatten(start_dim=1).norm(dim=1, keepdim=True)
-            if self.value_loss == 'huber':
-                gradient_loss = 0.5 * (F.smooth_l1_loss(gradients_error_norms1, zero_targets) + F.smooth_l1_loss(gradients_error_norms2, zero_targets))
-            elif self.value_loss == 'mse':
-                gradient_loss = 0.5 * (F.mse_loss(gradients_error_norms1, zero_targets) + F.mse_loss(gradients_error_norms2, zero_targets))
-            # loss = ∇ₐ δ(s, a, s') + λ|δ(s, a, s')|
-            critic_loss = critic_loss + self.tdg_error_weight * gradient_loss
+
+
+        if self.value_loss == 'huber':
+            loss_fn = F.smooth_l1_loss
+        elif self.value_loss == 'mse':
+            loss_fn = F.mse_loss
+        else:
+            raise ValueError(f'Unexpected loss: "{self.value_loss}"')
+
+
+        # Compute the True Residual update for MAGE: =================================
+        
+        standard_loss = 0.5 * loss_fn(q_td_error,zero_targets)
+
+        if self.tdg_error_weight !=0:
+
+                # Shape: [batch, actions]
+                gradients_error_norms = torch.autograd.grad(outputs=q_td_error, inputs=actions,
+                                           grad_outputs=torch.ones(q_td_error.size(), device=self.device),
+                                           retain_graph=True, create_graph=True,
+                                           only_inputs=True)[0].flatten(start_dim=1).norm(dim=1, keepdim=True)
+
+
+                # Compute magnitude of gradient of TD relative to actions
+                gradient_loss = torch.mean(gradients_error_norms) #0.5 * loss_fn(gradients_error_norms, zero_targets)  
+        
+
+       
+        critic_loss = standard_loss + self.tdg_error_weight * gradient_loss
 
         # Optimize the critic
         self.critic_optimizer.zero_grad()
@@ -182,11 +195,10 @@ class TD3(nn.Module):
         torch.nn.utils.clip_grad_value_(self.critic.parameters(), self.grad_clip)
         self.critic_optimizer.step()
 
-        if self.step_counter % self.policy_delay == 0:
+        if self.step_counter % 1 == 0: #% self.policy_delay == 0: # For residual try to update policy every iteration
             # Compute actor loss
-            q1, q2 = self.critic(states, self.actor(states))  # originally in TD3 we had here q1 only
-            q_min = torch.min(q1, q2)
-            actor_loss = -q_min.mean()
+            q = self.critic(states, self.actor(states))  # originally in TD3 we had here q1 only
+            actor_loss = -q.mean()
             self.last_actor_loss = actor_loss.item()
 
             # Optimize the actor
@@ -196,14 +208,10 @@ class TD3(nn.Module):
             self.actor_optimizer.step()
 
             # Update the frozen target policy
-            for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
-                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+            #for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
+            #    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
-        # Update the frozen target value function
-        for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
-            target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-
-        return raw_next_actions[0, 0].item(), self.td_error_weight * standard_loss.item(), self.tdg_error_weight * gradient_loss.item(), self.last_actor_loss
+        return raw_next_actions[0, 0].item(), standard_loss.item(), self.tdg_error_weight * gradient_loss.item(), self.last_actor_loss
 
     @staticmethod
     def catastrophic_divergence(q_loss, pi_loss):
