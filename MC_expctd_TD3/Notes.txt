@@ -1,0 +1,6 @@
+When it trains the critic and the actor, it uses a deterministic action for the current action, which I thought it would impair exploration. 
+However, I think the exploration comes only at the level of true transitions (i.e. those performed in the environment), there it uses a stochastic policy.
+ Conversely, since the actor and critic are trained on the "imagined" transitions, I guess we can do so with deterministic actions.
+I think that is because all we care for exploration are the "current" states in MAGE settings (since all the rest is re-evaluated new), based on these we then have a model of the environment and reward, so as long as the buffer provides diverse inital states, which it does since "current" states collect through an exploratory policy, it should work well
+
+Namely, if I get an estimate of Q(.,a) for a lot of states, then get a diverse Q that can use to learn a good policy (I am still not convinced by this, since my actions should also be diverse enough - i.e. come from a behavioural stochastic policy)

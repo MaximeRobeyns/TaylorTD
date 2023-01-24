@@ -1,0 +1,1 @@
+python3 hyperParam_parsArg.py -t 69 -e HalfCheetah-v2  -or 1 --run_type train --n_step 50000 -tac True  --cmd python3 main.py
