@@ -4,6 +4,7 @@
 # This main is to be used with Humanoid and not with the old envs due to a change in how the rwd is computed
 # in all old envs the rwd is re-computed based on the task() function, here it relies on the actual observed rwd 
 # from the environment
+
 import logging
 import warnings
 
@@ -118,8 +119,6 @@ def model_training_config():
     model_sampling_type = 'ensemble'                # Procedure to use when sampling from ensemble of models, 'ensemble' or 'DS'
 
 
-# TODO: For training/evaluation active/reactive consider using hierarchical dicts
-# noinspection PyUnusedLocal
 @ex.config
 def policy_training_config(env_name):
     discount = 0.99                                # discount factor
@@ -131,7 +130,6 @@ def policy_training_config(env_name):
     policy_actors = 1024                           # number of parallel actors in imagination MDP
 
 
-# noinspection PyUnusedLocal
 @ex.config
 def policy_arch_config(n_total_steps, env_name):
 
@@ -172,7 +170,6 @@ def policy_arch_config(n_total_steps, env_name):
 
 
 
-# noinspection PyUnusedLocal
 @ex.config
 def infra_config(env_name,agent_alg,run_type, td3_action_cov, td3_state_cov,  run_number):
     use_cuda = True                                 # if true use CUDA
@@ -336,9 +333,6 @@ def get_buffer(d_state, d_action, n_total_steps, normalize_data, device, data_bu
 
 """ Agent Training """
 
-# I don't think this class is used; Mage, taylor and Dyna-TD3, all rely on transition provided by the model (imaginary) which are
-# computed by the class below ImaginationTransitionsProvider, this class should be used for standard td3 methods, which rely on
-# buffer transitions rather than imaginary ones
 class BufferTransitionsProvider:
     def __init__(self, buffer, task, is_done, device, policy_actors):
         self.buffer = buffer

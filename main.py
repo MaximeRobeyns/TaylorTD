@@ -117,7 +117,6 @@ def model_training_config():
     model_sampling_type = 'ensemble'                # Procedure to use when sampling from ensemble of models, 'ensemble' or 'DS'
 
 
-# TODO: For training/evaluation active/reactive consider using hierarchical dicts
 # noinspection PyUnusedLocal
 @ex.config
 def policy_training_config(env_name):
@@ -343,9 +342,7 @@ def get_buffer(d_state, d_action, n_total_steps, normalize_data, device, data_bu
 
 """ Agent Training """
 
-# I don't think this class is used; Mage, taylor and Dyna-TD3, all rely on transition provided by the model (imaginary) which are
-# computed by the class below ImaginationTransitionsProvider, this class should be used for standard td3 methods, which rely on
-# buffer transitions rather than imaginary ones
+# This class is not used, just kept in case need to sample full buffer transitions 
 class BufferTransitionsProvider:
     def __init__(self, buffer,  is_done, device, policy_actors):
         self.buffer = buffer
