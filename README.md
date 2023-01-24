@@ -1,6 +1,6 @@
 # TaylorTD
 
-Providing a lower variance TD updates through a first-order Taylor expansion of an TD update.
+Providing lower variance TD updates through a first-order Taylor expansion of expected TD updates.
 
 # Installation Instructions
 
