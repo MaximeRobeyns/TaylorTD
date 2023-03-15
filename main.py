@@ -94,7 +94,7 @@ def model_arch_config(env_name):
     model_n_layers = 4                              # number of hidden layers in the model (at least 2)
     model_activation = 'swish'                      # activation function (see models.py for options)
 
-    if env_name == 'GYMMB_Humanoid-v2':
+    if env_name == 'GYMMB_Humanoid-v2' or env_name =='GYMMB_Ant-v2':
         reward_n_units = 512
     else:
         reward_n_units = 256
@@ -133,7 +133,7 @@ def policy_training_config(env_name):
 @ex.config
 def policy_arch_config(n_total_steps,env_name):
 
-    if env_name == 'GYMMB_Humanoid-v2': 
+    if env_name == 'GYMMB_Humanoid-v2'or env_name =='GYMMB_Ant-v2': 
         policy_n_layers = 4
         value_n_layers = 4
     else:
