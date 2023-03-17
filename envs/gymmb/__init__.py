@@ -1,6 +1,12 @@
 from gym.envs.registration import register
 
 register(
+    id='GYMMB_Hopper-v2',
+    entry_point='envs.gymmb.hopper:GYMMB_Hopper',
+    max_episode_steps=1000
+)
+
+register(
     id='GYMMB_Ant-v2',
     entry_point='envs.gymmb.ant:GYMMB_Ant',
     max_episode_steps=1000
