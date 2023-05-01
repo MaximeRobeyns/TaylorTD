@@ -61,7 +61,6 @@ class EnvLoop:
         next_state, rwd, done, info = self.env.step(action)
 
 
-
         if self.torch_np_conversion:
             next_state = to_torch(next_state)
 
