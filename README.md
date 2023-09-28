@@ -90,3 +90,5 @@ And any other python packages required:
 ``` sh
 pip install dotmap sacred
 ```
+## Note 
+The underlying structure of the code is based (but not forked) on [MAGE](https://github.com/nnaisense/MAGE): Model-based Action-Gradient-Estimator Policy Optimization ([paper](https://arxiv.org/abs/2004.14309)).
