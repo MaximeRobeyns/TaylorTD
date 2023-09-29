@@ -1,4 +1,6 @@
-# TaylorTD
+<div align="center">
+<h1>Taylor TD Learning</h1>
+</div>
 
 Providing lower variance TD updates through a first-order Taylor expansion of expected TD updates.
 
@@ -47,9 +49,10 @@ linker path so that `ld` knows where to find mujoco. In `.envrc`,
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/.mujoco/mjpro150/bin
 ```
 
-I have also found that the linker cannot find the `GLIBCXX_3.4.29` symbol, which
-can be rectified by preloading the OS's `libstdc++.so` file, by adding the
-following to `.envrcc` (change the location to point to your `libstdc++.so`).
+On some systems, you may find that the linker can't find the `GLIBCXX_3.4.29`
+symbol, which can be rectified by preloading the OS's `libstdc++.so` file, by
+exporting the following environment variable (change the location to point to
+your `libstdc++.so`).
 
 ``` sh
 export LD_PRELOAD=/usr/lib64/libstdc++.so.6
@@ -58,9 +61,9 @@ export LD_PRELOAD=/usr/lib64/libstdc++.so.6
 In order to render things, you will also need `GLEW`. Using anaconda
 
 ``` sh
-conda install -c conda-forge glew mesalib patchelf gxx gcc
-conda install -c anaconda mesa-libgl-cos6-x86_64 swig
-conda install -c menpo glfw3
+conda install -c conda-forge glew mesalib patchelf gxx gcc \
+                 anaconda mesa-libgl-cos6-x86_64 swig \
+                 menpo glfw
 ```
 
 now, in `.envrc`:
@@ -90,5 +93,5 @@ And any other python packages required:
 ``` sh
 pip install dotmap sacred
 ```
-## Note 
+## Note
 The underlying structure of the code is based (but not forked) on [MAGE](https://github.com/nnaisense/MAGE): Model-based Action-Gradient-Estimator Policy Optimization ([paper](https://arxiv.org/abs/2004.14309)).

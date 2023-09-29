@@ -1,3 +1,0 @@
-#!/bin/bash
-
-unison -servercmd /user/home/ez18285/.local/bin/unison -auto taylorrl -logfile ~/.unison/unison.log

@@ -133,3 +133,4 @@ dmypy.json
 conda_env.yml
 MUJOCO_LOG.TXT
 logs
+sync

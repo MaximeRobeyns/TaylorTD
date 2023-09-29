@@ -1,0 +1,15 @@
+cff-version: 1.1.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: Garibbo
+    given-names: Michele
+    orcid: https://orcid.org/0000-0002-6446-2402
+  - family-names: Robeyns
+    given-names: Maxime
+    orcid: https://orcid.org/0000-0001-9802-9597
+  - family-names: Laurence
+    given-names: Aitchison
+title: "Taylor TD Learning"
+version: 0.0.1
+date-released: 2023-10-01
+repository-code: "https://github.com/MaximeRobeyns/TaylorTD"
