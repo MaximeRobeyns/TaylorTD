@@ -1,7 +1,8 @@
-import collections
-import sys
-from os import path
 import os
+import sys
+import collections
+
+from os import path
 
 
 def get_shell_command():
@@ -10,7 +11,7 @@ def get_shell_command():
 
 
 def dump_shell_command(dump_dir):
-    with open(path.join(dump_dir, 'command'), "w") as f:
+    with open(path.join(dump_dir, "command"), "w") as f:
         f.write(get_shell_command() + "\n")
 
 
@@ -23,7 +24,7 @@ def get_filepaths(dirpath, extensions):
     return files
 
 
-def flatten_dict(d, parent_key='', sep='_'):
+def flatten_dict(d, parent_key="", sep="_"):
     items = []
     for k, v in d.items():
         new_key = parent_key + sep + k if parent_key else k

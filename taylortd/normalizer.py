@@ -104,20 +104,45 @@ class TransitionNormalizer:
             state_delta_mean_old = self.state_delta_mean.clone()
             reward_mean_old = self.reward_mean.clone()
 
-            self.state_mean = self.update_mean(self.state_mean, state, self.count)
-            self.action_mean = self.update_mean(self.action_mean, action, self.count)
-            self.state_delta_mean = self.update_mean(self.state_delta_mean, state_delta, self.count)
-            self.reward_mean = self.update_mean(self.reward_mean, reward, self.count)
+            self.state_mean = self.update_mean(
+                self.state_mean, state, self.count
+            )
+            self.action_mean = self.update_mean(
+                self.action_mean, action, self.count
+            )
+            self.state_delta_mean = self.update_mean(
+                self.state_delta_mean, state_delta, self.count
+            )
+            self.reward_mean = self.update_mean(
+                self.reward_mean, reward, self.count
+            )
 
-            self.state_sk = self.update_sk(self.state_sk, state_mean_old, self.state_mean, state)
-            self.action_sk = self.update_sk(self.action_sk, action_mean_old, self.action_mean, action)
-            self.state_delta_sk = self.update_sk(self.state_delta_sk, state_delta_mean_old, self.state_delta_mean, state_delta)
-            self.reward_sk = self.update_sk(self.reward_sk, reward_mean_old, self.reward_mean, reward)
+            self.state_sk = self.update_sk(
+                self.state_sk, state_mean_old, self.state_mean, state
+            )
+            self.action_sk = self.update_sk(
+                self.action_sk, action_mean_old, self.action_mean, action
+            )
+            self.state_delta_sk = self.update_sk(
+                self.state_delta_sk,
+                state_delta_mean_old,
+                self.state_delta_mean,
+                state_delta,
+            )
+            self.reward_sk = self.update_sk(
+                self.reward_sk, reward_mean_old, self.reward_mean, reward
+            )
 
             self.state_stdev = fix_stdev(torch.sqrt(self.state_sk / self.count))
-            self.action_stdev = fix_stdev(torch.sqrt(self.action_sk / self.count))
-            self.state_delta_stdev = fix_stdev(torch.sqrt(self.state_delta_sk / self.count))
-            self.reward_stdev = fix_stdev(torch.sqrt(self.reward_sk / self.count))
+            self.action_stdev = fix_stdev(
+                torch.sqrt(self.action_sk / self.count)
+            )
+            self.state_delta_stdev = fix_stdev(
+                torch.sqrt(self.state_delta_sk / self.count)
+            )
+            self.reward_stdev = fix_stdev(
+                torch.sqrt(self.reward_sk / self.count)
+            )
 
     def normalize_states(self, states):
         return normalize(states, self.state_mean, self.state_stdev)
@@ -129,17 +154,23 @@ class TransitionNormalizer:
         return normalize(actions, self.action_mean, self.action_stdev)
 
     def normalize_state_deltas(self, state_deltas):
-        return normalize(state_deltas, self.state_delta_mean, self.state_delta_stdev)
+        return normalize(
+            state_deltas, self.state_delta_mean, self.state_delta_stdev
+        )
 
     def denormalize_state_delta_means(self, norm_state_deltas_means):
-        return denormalize(norm_state_deltas_means, self.state_delta_mean, self.state_delta_stdev)
+        return denormalize(
+            norm_state_deltas_means,
+            self.state_delta_mean,
+            self.state_delta_stdev,
+        )
 
     def denormalize_rewards(self, norm_rewards):
         return denormalize(norm_rewards, self.reward_mean, self.reward_stdev)
 
     def denormalize_state_delta_vars(self, state_delta_vars):
         mean, stdev = self.state_delta_mean, self.state_delta_stdev
-        return state_delta_vars * (stdev ** 2)
+        return state_delta_vars * (stdev**2)
 
     def renormalize_state_delta_means(self, state_deltas_means):
         mean, stdev = self.state_delta_mean, self.state_delta_stdev
@@ -147,4 +178,4 @@ class TransitionNormalizer:
 
     def renormalize_state_delta_vars(self, state_delta_vars):
         mean, stdev = self.state_delta_mean, self.state_delta_stdev
-        return state_delta_vars / (stdev ** 2)
+        return state_delta_vars / (stdev**2)

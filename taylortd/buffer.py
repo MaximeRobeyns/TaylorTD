@@ -34,12 +34,17 @@ class Buffer:
 
     def _add(self, buffer, arr):
         n = arr.size(0)
-        excess = self.ptr + n - self.size  # by how many elements we exceed the size
+        excess = (
+            self.ptr + n - self.size
+        )  # by how many elements we exceed the size
         if excess <= 0:  # all elements fit
             a, b = n, 0
         else:
-            a, b = n - excess, excess  # we need to split into a + b = n; a at the end and the rest in the beginning
-        buffer[self.ptr:self.ptr + a] = arr[:a]
+            a, b = (
+                n - excess,
+                excess,
+            )  # we need to split into a + b = n; a at the end and the rest in the beginning
+        buffer[self.ptr : self.ptr + a] = arr[:a]
         buffer[:b] = arr[a:]
 
     def add(self, states, actions, next_states, rewards):
@@ -51,7 +56,9 @@ class Buffer:
             actions: pytorch Tensors of (n_transitions, d_action) shape
             next_states: pytorch Tensors of (n_transitions, d_state) shape
         """
-        states, actions, next_states, rewards = [x.clone().cpu() for x in [states, actions, next_states, rewards]]
+        states, actions, next_states, rewards = [
+            x.clone().cpu() for x in [states, actions, next_states, rewards]
+        ]
 
         state_deltas = next_states - states
         n_transitions = states.size(0)
@@ -99,7 +106,9 @@ class Buffer:
             next state of size (ensemble_size, n_samples, d_state)
         """
         num = len(self)
-        indices = [np.random.permutation(range(num)) for _ in range(ensemble_size)]
+        indices = [
+            np.random.permutation(range(num)) for _ in range(ensemble_size)
+        ]
         indices = np.stack(indices)
 
         for i in range(0, num, batch_size):
@@ -120,7 +129,9 @@ class Buffer:
 
             states = states.reshape(ensemble_size, batch_size, self.d_state)
             actions = actions.reshape(ensemble_size, batch_size, self.d_action)
-            state_deltas = state_deltas.reshape(ensemble_size, batch_size, self.d_state)
+            state_deltas = state_deltas.reshape(
+                ensemble_size, batch_size, self.d_state
+            )
 
             yield states, actions, state_deltas
 
@@ -138,7 +149,9 @@ class Buffer:
             next state of size (ensemble_size, n_samples, d_state)
         """
         num = len(self)
-        indices = [np.random.permutation(range(num)) for _ in range(ensemble_size)]
+        indices = [
+            np.random.permutation(range(num)) for _ in range(ensemble_size)
+        ]
         indices = np.stack(indices)
 
         for i in range(0, num, batch_size):
@@ -160,12 +173,12 @@ class Buffer:
 
             states = states.reshape(ensemble_size, batch_size, self.d_state)
             actions = actions.reshape(ensemble_size, batch_size, self.d_action)
-            state_deltas = state_deltas.reshape(ensemble_size, batch_size, self.d_state)
+            state_deltas = state_deltas.reshape(
+                ensemble_size, batch_size, self.d_state
+            )
             rewards = rewards.reshape(ensemble_size, batch_size, 1)
 
             yield states, actions, rewards, state_deltas
-
-
 
     def __len__(self):
         return self.size if self.is_full else self.ptr
@@ -177,10 +190,14 @@ class Buffer:
         self.__dict__.update(state)
 
         # backward compatibility with old buffers
-        if 'size' not in state and 'ptr' not in state and 'is_full' not in state:
-            self.size = state['buffer_size']
-            self.ptr = state['_n_elements'] % state['buffer_size']
-            self.is_full = (state['_n_elements'] > state['buffer_size'])
+        if (
+            "size" not in state
+            and "ptr" not in state
+            and "is_full" not in state
+        ):
+            self.size = state["buffer_size"]
+            self.ptr = state["_n_elements"] % state["buffer_size"]
+            self.is_full = state["_n_elements"] > state["buffer_size"]
             del self.buffer_size
             del self._n_elements
             del self.ensemble_size

@@ -2,9 +2,10 @@ import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models import get_activation, init_weights
-from radam import RAdam
 import numpy as np
+
+from taylortd.radam import RAdam
+from taylortd.models import get_activation, init_weights
 
 
 class ActionValueFunction(nn.Module):
@@ -12,7 +13,10 @@ class ActionValueFunction(nn.Module):
         super().__init__()
         assert n_layers >= 1, "# of hidden layers"
 
-        layers = [nn.Linear(d_state + d_action, n_units), get_activation(activation)]
+        layers = [
+            nn.Linear(d_state + d_action, n_units),
+            get_activation(activation),
+        ]
         for lyr_idx in range(1, n_layers):
             layers += [nn.Linear(n_units, n_units), get_activation(activation)]
         layers += [nn.Linear(n_units, 1)]
@@ -35,7 +39,11 @@ class Actor(nn.Module):
             layers += [nn.Linear(n_units, n_units), get_activation(activation)]
         layers += [nn.Linear(n_units, d_action)]
 
-        [init_weights(layer) for layer in layers if isinstance(layer, nn.Linear)]
+        [
+            init_weights(layer)
+            for layer in layers
+            if isinstance(layer, nn.Linear)
+        ]
 
         self.layers = nn.Sequential(*layers)
 
@@ -70,7 +78,11 @@ class DDPG(nn.Module):
         super().__init__()
 
         self.actor = Actor(
-            d_state, d_action, policy_n_layers, policy_n_units, policy_activation
+            d_state,
+            d_action,
+            policy_n_layers,
+            policy_n_units,
+            policy_activation,
         ).to(device)
         self.actor_target = copy.deepcopy(self.actor)
         self.actor_optimizer = RAdam(self.actor.parameters(), lr=policy_lr)
@@ -144,7 +156,8 @@ class DDPG(nn.Module):
         # Compute the target Q value
         next_Q = self.critic_target(next_states, next_actions)
         q_target = (
-            rewards.unsqueeze(1) + self.discount * masks.float().unsqueeze(1) * next_Q
+            rewards.unsqueeze(1)
+            + self.discount * masks.float().unsqueeze(1) * next_Q
         )
         zero_targets = torch.zeros_like(q_target, device=self.device)
 
@@ -166,7 +179,9 @@ class DDPG(nn.Module):
                 torch.autograd.grad(
                     outputs=q_td_error,
                     inputs=actions,
-                    grad_outputs=torch.ones(q_td_error.size(), device=self.device),
+                    grad_outputs=torch.ones(
+                        q_td_error.size(), device=self.device
+                    ),
                     retain_graph=True,
                     create_graph=True,
                     only_inputs=True,
@@ -179,13 +194,17 @@ class DDPG(nn.Module):
                     gradients_error_norms, zero_targets
                 )
             elif self.value_loss == "mse":
-                gradient_loss = 0.5 * F.mse_loss(gradients_error_norms, zero_targets)
+                gradient_loss = 0.5 * F.mse_loss(
+                    gradients_error_norms, zero_targets
+                )
             critic_loss = critic_loss + self.tdg_error_weight * gradient_loss
 
         # Optimize the critic
         self.critic_optimizer.zero_grad()
         critic_loss.backward(retain_graph=True)
-        torch.nn.utils.clip_grad_value_(self.critic.parameters(), self.grad_clip)
+        torch.nn.utils.clip_grad_value_(
+            self.critic.parameters(), self.grad_clip
+        )
         self.critic_optimizer.step()
 
         # Compute actor loss

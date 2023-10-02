@@ -10,9 +10,15 @@ import warnings
 warnings.filterwarnings(
     action="ignore", module="importlib", category=DeprecationWarning
 )
-warnings.filterwarnings(action="ignore", module="dotmap", category=DeprecationWarning)
-warnings.filterwarnings(action="ignore", module="tensorflow", category=FutureWarning)
-warnings.filterwarnings(action="ignore", module="tensorboard", category=FutureWarning)
+warnings.filterwarnings(
+    action="ignore", module="dotmap", category=DeprecationWarning
+)
+warnings.filterwarnings(
+    action="ignore", module="tensorflow", category=FutureWarning
+)
+warnings.filterwarnings(
+    action="ignore", module="tensorboard", category=FutureWarning
+)
 warnings.filterwarnings(action="ignore", module="gym", category=FutureWarning)
 
 from time import perf_counter
@@ -30,23 +36,27 @@ from logger import configure_logger
 from metriclogger import MetricLogger
 
 # noinspection PyUnresolvedReferences
-import envs  # Register custom gym envs
+import taylortd.envs  # Register custom gym envs
 
 # noinspection PyUnresolvedReferences
-import envs.gymmb  # Register custom gym envs
+import taylortd.envs.gymmb  # Register custom gym envs
 
 # noinspection PyUnresolvedReferences
-import sacred_utils  # For a custom mongodb flag
+import taylortd.sacred_utils  # For a custom mongodb flag
 
-from radam import RAdam
-from reward_model import RewardModel
-from td3_taylor import TD3_Taylor
-from wrappers import BoundedActionsEnv, IsDoneEnv, MuJoCoCloseFixWrapper
-from buffer import Buffer
-from models import Model
-from normalizer import TransitionNormalizer
-from imagination import SingleStepImagination
-from utils import to_np, EpisodeStats
+from taylortd.radam import RAdam
+from taylortd.reward_model import RewardModel
+from taylortd.td3_taylor import TD3_Taylor
+from taylortd.wrappers import (
+    BoundedActionsEnv,
+    IsDoneEnv,
+    MuJoCoCloseFixWrapper,
+)
+from taylortd.buffer import Buffer
+from taylortd.models import Model
+from taylortd.normalizer import TransitionNormalizer
+from taylortd.imagination import SingleStepImagination
+from taylortd.utils import to_np, EpisodeStats
 
 
 ex = sacred.Experiment(
@@ -104,7 +114,9 @@ def model_arch_config(env_name):
         512  # number of hidden units in each hidden layer (hidden layer size)
     )
     model_n_layers = 4  # number of hidden layers in the model (at least 2)
-    model_activation = "swish"  # activation function (see models.py for options)
+    model_activation = (
+        "swish"  # activation function (see models.py for options)
+    )
 
     if env_name == "GYMMB_Humanoid-v2" or env_name == "GYMMB_Ant-v2":
         reward_n_units = 512
@@ -142,7 +154,9 @@ def policy_training_config(env_name):
     policy_training_n_iters = (
         10  # number of policy update iterations (img data + policy update)
     )
-    policy_training_n_updates_per_iter = 1  # number of on-policy optimizations steps
+    policy_training_n_updates_per_iter = (
+        1  # number of on-policy optimizations steps
+    )
 
     policy_actors = 1024  # number of parallel actors in imagination MDP
 
@@ -191,10 +205,14 @@ def policy_arch_config(n_total_steps, env_name):
 
 # noinspection PyUnusedLocal
 @ex.config
-def infra_config(env_name, agent_alg, run_type, grad_action, grad_state, run_number):
+def infra_config(
+    env_name, agent_alg, run_type, grad_action, grad_state, run_number
+):
     use_cuda = True  # if true use CUDA
     gpu_id = 0  # ID of GPU to use (by default use GPU 0)
-    print_config = True  # Set False if you don't want that (e.g. for regression tests)
+    print_config = (
+        True  # Set False if you don't want that (e.g. for regression tests)
+    )
 
     checkpoint = False  # Use true to store checkpoints
     restart_checkpoint = False  # Use to load model from an existing checkpoint
@@ -204,7 +222,9 @@ def infra_config(env_name, agent_alg, run_type, grad_action, grad_state, run_num
         use_cuda and "CUDA_VISIBLE_DEVICES" not in os.environ
     ):  # gpu_id is used only if CUDA_VISIBLE_DEVICES was not set
         os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-    device = torch.device("cuda" if use_cuda and torch.cuda.is_available() else "cpu")
+    device = torch.device(
+        "cuda" if use_cuda and torch.cuda.is_available() else "cpu"
+    )
 
     update_dir = ""
 
@@ -216,9 +236,7 @@ def infra_config(env_name, agent_alg, run_type, grad_action, grad_state, run_num
         update_dir = "ZeroOrder"
 
     self_dir = os.path.dirname(os.path.abspath(__file__))
-    dump_dir = (
-        "__default__"  # Set dump_dir=None if you don't want to be create dump_dir
-    )
+    dump_dir = "__default__"  # Set dump_dir=None if you don't want to be create dump_dir
     if dump_dir == "__default__":
         #    dump_dir = os.path.join(self_dir, 'logs', f'{datetime.now().strftime("%Y%m%d%H%M%S")}_{os.getpid()}')
         dump_dir = os.path.join(
@@ -233,7 +251,9 @@ def infra_config(env_name, agent_alg, run_type, grad_action, grad_state, run_num
     if dump_dir is not None:
         os.makedirs(dump_dir, exist_ok=True)
 
-    omp_num_threads = 1  # 1 is usually the correct choice, especially when using GPU
+    omp_num_threads = (
+        1  # 1 is usually the correct choice, especially when using GPU
+    )
 
 
 @ex.capture
@@ -353,7 +373,10 @@ def get_random_agent(d_action, device):
         @staticmethod
         def get_action(states, deterministic=False):
             # This is not so nice since we hard-code [-1, +1] range but this is the only way to be compatible with the agent interface
-            return torch.rand(size=(states.shape[0], d_action), device=device) * 2 - 1
+            return (
+                torch.rand(size=(states.shape[0], d_action), device=device) * 2
+                - 1
+            )
 
     return RandomAgent()
 
@@ -393,7 +416,13 @@ def get_model(
 
 @ex.capture
 def get_reward_model(
-    d_action, d_state, reward_n_units, reward_n_layers, reward_activation, device, _run
+    d_action,
+    d_state,
+    reward_n_units,
+    reward_n_layers,
+    reward_activation,
+    device,
+    _run,
 ):
     logger.debug(f"{ex.step_i:6d} | getting fresh reward model ...")
     model = RewardModel(
@@ -409,7 +438,13 @@ def get_reward_model(
 
 @ex.capture  # Return the function (i.e. SingleStepImagination) to generate (imagined) one-step transitions based on the model of environment
 def get_imagination(
-    model, initial_states, *, model_sampling_type, policy_actors, grad_state, det_action
+    model,
+    initial_states,
+    *,
+    model_sampling_type,
+    policy_actors,
+    grad_state,
+    det_action,
 ):
     return SingleStepImagination(
         model,
@@ -489,7 +524,9 @@ def get_training_data_provider(model, buffer, is_done):
     imagination = get_imagination(
         model, initial_states
     )  # Creates an "imagination" obj needed to generate next states through the ImaginationTransitionsProvider
-    return ImaginationTransitionsProvider(imagination=imagination, is_done=is_done)
+    return ImaginationTransitionsProvider(
+        imagination=imagination, is_done=is_done
+    )
 
 
 @ex.capture
@@ -514,7 +551,12 @@ def train_agent(
 
     q_loss, pi_loss = np.nan, np.nan
     for img_step_i in range(1, policy_training_n_iters + 1):
-        states, actions, next_states, dones = data_provider.get_training_transitions(
+        (
+            states,
+            actions,
+            next_states,
+            dones,
+        ) = data_provider.get_training_transitions(
             agent
         )  # Key method call where get all the RL variables (s,a,r,s',d)
         rewards = reward_model(states, actions, next_states).squeeze(1)
@@ -547,7 +589,9 @@ def train_agent(
             raw_action=raw_action,
             update_batch_size=states.size()[0],
         )
-        ex.mlog.add_scalars(f"{mode}/{task_name}/mb_final", log_dict, **context_i)
+        ex.mlog.add_scalars(
+            f"{mode}/{task_name}/mb_final", log_dict, **context_i
+        )
 
     return agent
 
@@ -576,14 +620,18 @@ def model_train_epoch(
 
 
 @ex.capture
-def train_model(model, optimizer, buffer, mode, model_training_n_batches, *, _run):
+def train_model(
+    model, optimizer, buffer, mode, model_training_n_batches, *, _run
+):
     logger.debug(f"{ex.step_i:6d} | {mode} | training model...")
     n_target_batches = model_training_n_batches
 
     loss = np.nan
     batch_i = 0
     while batch_i < n_target_batches:
-        losses = model_train_epoch(model=model, buffer=buffer, optimizer=optimizer)
+        losses = model_train_epoch(
+            model=model, buffer=buffer, optimizer=optimizer
+        )
         batch_i += len(losses)
         loss = np.mean(losses)
         logger.log(
@@ -592,7 +640,9 @@ def train_model(model, optimizer, buffer, mode, model_training_n_batches, *, _ru
         )
         ex.mlog.add_scalar(f"{mode}/model/train_loss", loss, batch_i=batch_i)
 
-    logger.debug(f"{ex.step_i:6d} | {mode} | model training final loss : {loss:.3f}")
+    logger.debug(
+        f"{ex.step_i:6d} | {mode} | model training final loss : {loss:.3f}"
+    )
     ex.mlog.add_scalar(f"{mode}/model/training_loss_final", loss)
 
 
@@ -642,7 +692,9 @@ def train_reward_model(
             5,
             f"{ex.step_i:6d} | {mode} | batch {batch_i:3d} | reward model training loss: {loss:.2f}",
         )
-        ex.mlog.add_scalar(f"{mode}/reward_model/train_loss", loss, batch_i=batch_i)
+        ex.mlog.add_scalar(
+            f"{mode}/reward_model/train_loss", loss, batch_i=batch_i
+        )
 
     logger.debug(
         f"{ex.step_i:6d} | {mode} | reward model training final loss : {loss:.3f}"
@@ -702,7 +754,9 @@ def evaluate_on_tasks(agent, model, buffer, task_name, context):
     env = get_env()
     env.close()
 
-    ep_returns, ep_lengths = evaluate_on_task(agent, model, buffer, task_name, context)
+    ep_returns, ep_lengths = evaluate_on_task(
+        agent, model, buffer, task_name, context
+    )
     avg_ep_return = np.mean(ep_returns)
     std_ep_return = np.std(ep_returns)
     avg_ep_length = np.mean(ep_lengths)
@@ -741,7 +795,8 @@ def log_last_episode(stats, task_name, *, _run):
         f"{ex.step_i:6d} | train | t:{task_name} | return: {last_ep_return:5.1f} ({last_ep_len:3d} steps)"
     )
     ex.mlog.add_scalars(
-        f"train/{task_name}/episode", {"return": last_ep_return, "length": last_ep_len}
+        f"train/{task_name}/episode",
+        {"return": last_ep_return, "length": last_ep_len},
     )
 
 
@@ -800,7 +855,9 @@ class MainTrainingLoop:
             self.model.load_state_dict(MODEL["Env_model"])
             self.model_optimizer.load_state_dict(MODEL["Env_model_optim"])
             self.reward_model.load_state_dict(MODEL["Rwd_model"])
-            self.reward_model_optimizer.load_state_dict(MODEL["Rwd_model_optim"])
+            self.reward_model_optimizer.load_state_dict(
+                MODEL["Rwd_model_optim"]
+            )
 
     @ex.capture
     def _common_setup(
@@ -842,7 +899,9 @@ class MainTrainingLoop:
         )
         with torch.no_grad():
             action = (
-                behavioral_agent.get_action(self.env_loop.state, deterministic=False)
+                behavioral_agent.get_action(
+                    self.env_loop.state, deterministic=False
+                )
                 .detach()
                 .to("cpu")
             )  # KEY: ensure real transition are sampled based on stochastic policy
@@ -896,7 +955,10 @@ class MainTrainingLoop:
             )
 
         # (Re)train the policy using current buffer and model
-        if ex.step_i >= n_warm_up_steps and ex.step_i % policy_training_freq == 0:
+        if (
+            ex.step_i >= n_warm_up_steps
+            and ex.step_i % policy_training_freq == 0
+        ):
             self.agent.setup_normalizer(self.buffer.normalizer)
             #
             # train_agent is the main event.

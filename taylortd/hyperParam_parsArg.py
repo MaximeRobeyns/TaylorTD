@@ -1,8 +1,7 @@
-import numpy as np
-import os
 import sys
-import argparse
 import torch
+import numpy as np
+import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--job-name", "-j", type=str, nargs="?")
@@ -14,8 +13,12 @@ parser.add_argument("--gpus", "-g", type=int, nargs="?", default=1)
 parser.add_argument(
     "--hours", "-t", type=int, nargs="?", default=10, help="time in hours"
 )
-parser.add_argument("--mins", type=int, nargs="?", default=0, help="time in mins")
-parser.add_argument("--mem", "-m", type=int, nargs="?", default=64, help="memory in gp")
+parser.add_argument(
+    "--mins", type=int, nargs="?", default=0, help="time in mins"
+)
+parser.add_argument(
+    "--mem", "-m", type=int, nargs="?", default=64, help="memory in gp"
+)
 parser.add_argument("--output", type=str, nargs="?", help="queue")
 parser.add_argument(
     "--exclude",

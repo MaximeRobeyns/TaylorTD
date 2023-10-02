@@ -1,13 +1,10 @@
-import numpy as np
-import math
-
 import copy
 import torch
-import torch.nn.functional as F
-from torch import nn as nn
-
-from torch.distributions import Normal
 import torch.jit
+import torch.nn.functional as F
+
+from torch import nn as nn
+from torch.distributions import Normal
 
 
 def linear(x):
@@ -26,11 +23,11 @@ class Swish(nn.Module):
 
 
 def get_activation(activation):
-    if activation == 'swish':
+    if activation == "swish":
         return Swish()
-    if activation == 'relu':
+    if activation == "relu":
         return nn.ReLU()
-    if activation == 'tanh':
+    if activation == "tanh":
         return nn.Tanh()
     # TODO: I should also initialize depending on the activation
     raise NotImplementedError(f"Unknown activation {activation}")
@@ -67,13 +64,13 @@ class EnsembleDenseLayer(nn.Module):
         for weight in weights:
             weight.transpose_(1, 0)
 
-            if non_linearity == 'swish':
+            if non_linearity == "swish":
                 nn.init.xavier_uniform_(weight)
-            elif non_linearity == 'leaky_relu':
+            elif non_linearity == "leaky_relu":
                 nn.init.kaiming_normal_(weight)
-            elif non_linearity == 'tanh':
+            elif non_linearity == "tanh":
                 nn.init.kaiming_normal_(weight)
-            elif non_linearity == 'linear':
+            elif non_linearity == "linear":
                 nn.init.xavier_normal_(weight)
 
             weight.transpose_(1, 0)
@@ -81,13 +78,13 @@ class EnsembleDenseLayer(nn.Module):
         self.weights = nn.Parameter(weights)
         self.biases = nn.Parameter(biases)
 
-        if non_linearity == 'swish':
+        if non_linearity == "swish":
             self.non_linearity = swish
-        elif non_linearity == 'leaky_relu':
+        elif non_linearity == "leaky_relu":
             self.non_linearity = F.leaky_relu
-        elif non_linearity == 'tanh':
+        elif non_linearity == "tanh":
             self.non_linearity = torch.tanh
-        elif non_linearity == 'linear':
+        elif non_linearity == "linear":
             self.non_linearity = linear
 
     def forward(self, inp):
@@ -118,7 +115,16 @@ class Model(nn.Module):
     min_log_var = -5
     max_log_var = -1
 
-    def __init__(self, d_action, d_state, n_units, n_layers, ensemble_size, activation, device):
+    def __init__(
+        self,
+        d_action,
+        d_state,
+        n_units,
+        n_layers,
+        ensemble_size,
+        activation,
+        device,
+    ):
         """
         state space forward model.
         predicts mean and variance of next state given state and action i.e independent gaussians for each dimension of next state.
@@ -150,11 +156,23 @@ class Model(nn.Module):
         layers = []
         for lyr_idx in range(n_layers + 1):
             if lyr_idx == 0:
-                lyr = EnsembleDenseLayer(d_action + d_state, n_units, ensemble_size, non_linearity=activation)
+                lyr = EnsembleDenseLayer(
+                    d_action + d_state,
+                    n_units,
+                    ensemble_size,
+                    non_linearity=activation,
+                )
             elif 0 < lyr_idx < n_layers:
-                lyr = EnsembleDenseLayer(n_units, n_units, ensemble_size, non_linearity=activation)
+                lyr = EnsembleDenseLayer(
+                    n_units, n_units, ensemble_size, non_linearity=activation
+                )
             else:  # lyr_idx == n_layers:
-                lyr = EnsembleDenseLayer(n_units, d_state + d_state, ensemble_size, non_linearity='linear')
+                lyr = EnsembleDenseLayer(
+                    n_units,
+                    d_state + d_state,
+                    ensemble_size,
+                    non_linearity="linear",
+                )
             layers.append(lyr)
 
         self.layers = nn.Sequential(*layers)
@@ -193,7 +211,9 @@ class Model(nn.Module):
     def _post_process_model_outputs(self, delta_mean, var):
         # denormalize to return in raw state space
         if self.normalizer is not None:
-            delta_mean = self.normalizer.denormalize_state_delta_means(delta_mean)
+            delta_mean = self.normalizer.denormalize_state_delta_means(
+                delta_mean
+            )
             var = self.normalizer.denormalize_state_delta_vars(var)
         return delta_mean, var
 
@@ -202,7 +222,9 @@ class Model(nn.Module):
         op = self.layers(inp)
         delta_mean, log_var = torch.split(op, self.d_state, dim=2)
 
-        log_var = self.min_log_var + (self.max_log_var - self.min_log_var) * torch.sigmoid(log_var)
+        log_var = self.min_log_var + (
+            self.max_log_var - self.min_log_var
+        ) * torch.sigmoid(log_var)
 
         return delta_mean, log_var.exp()
 
@@ -222,9 +244,15 @@ class Model(nn.Module):
         states = states.to(self.device)
         actions = actions.to(self.device)
 
-        normalized_states, normalized_actions = self._pre_process_model_inputs(states, actions)
-        normalized_delta_mean, normalized_var = self._propagate_network(normalized_states, normalized_actions)
-        delta_mean, var = self._post_process_model_outputs(normalized_delta_mean, normalized_var)
+        normalized_states, normalized_actions = self._pre_process_model_inputs(
+            states, actions
+        )
+        normalized_delta_mean, normalized_var = self._propagate_network(
+            normalized_states, normalized_actions
+        )
+        delta_mean, var = self._post_process_model_outputs(
+            normalized_delta_mean, normalized_var
+        )
         next_state_mean = delta_mean + states
         return next_state_mean, var
 
@@ -250,42 +278,61 @@ class Model(nn.Module):
         return next_state_means.transpose(0, 1), next_state_vars.transpose(0, 1)
 
     def random_ensemble(self, states, actions):
-        """ Returns a distribution for a single model in the ensemble (selected at random) """
+        """Returns a distribution for a single model in the ensemble (selected at random)"""
         batch_size = states.shape[0]
         # Get next state distribution for all components in the ensemble
-        next_state_means, next_state_vars = self.forward_all(states, actions)  # shape: (batch_size, ensemble_size, d_state)
+        next_state_means, next_state_vars = self.forward_all(
+            states, actions
+        )  # shape: (batch_size, ensemble_size, d_state)
 
         i = torch.arange(batch_size, device=self.device)
-        j = torch.randint(self.ensemble_size, size=(batch_size,), device=self.device)
+        j = torch.randint(
+            self.ensemble_size, size=(batch_size,), device=self.device
+        )
         mean = next_state_means[i, j]
         var = next_state_vars[i, j]
 
         return Normal(mean, var.sqrt())
 
     def ds(self, states, actions):
-        """ Create a single Gaussian out of Gaussian ensemble """
+        """Create a single Gaussian out of Gaussian ensemble"""
         # Get next state distribution for all components in the ensemble
-        next_state_means, next_state_vars = self.forward_all(states, actions)  # shape: (batch_size, ensemble_size, d_state)
-        next_state_means, next_state_vars = next_state_means.double(), next_state_vars.double()  # to prevent numerical errors (large means, small vars)
+        next_state_means, next_state_vars = self.forward_all(
+            states, actions
+        )  # shape: (batch_size, ensemble_size, d_state)
+        next_state_means, next_state_vars = (
+            next_state_means.double(),
+            next_state_vars.double(),
+        )  # to prevent numerical errors (large means, small vars)
 
-        mean = torch.mean(next_state_means, dim=1)  # shape: (batch_size, d_state)
-        mean_var = torch.mean(next_state_vars, dim=1)  # shape: (batch_size, d_state)
-        var = torch.mean(next_state_means ** 2, dim=1) - mean ** 2 + mean_var  # shape: (batch_size, d_state) 
+        mean = torch.mean(
+            next_state_means, dim=1
+        )  # shape: (batch_size, d_state)
+        mean_var = torch.mean(
+            next_state_vars, dim=1
+        )  # shape: (batch_size, d_state)
+        var = (
+            torch.mean(next_state_means**2, dim=1) - mean**2 + mean_var
+        )  # shape: (batch_size, d_state)
 
         # A safety bound to prevent some unexpected numerical issues. The variance cannot be smaller then mean_var since
         # the sum of the other terms needs to be always positive (convexity)
         var = torch.max(var, mean_var)
 
-        return Normal(mean.float(), var.sqrt().float())  # expects inputs shaped: (batch_size, d_state)
+        return Normal(
+            mean.float(), var.sqrt().float()
+        )  # expects inputs shaped: (batch_size, d_state)
 
     def posterior(self, states, actions, sampling_type):
-        assert sampling_type in ['ensemble', 'DS']
-        if sampling_type == 'ensemble':
+        assert sampling_type in ["ensemble", "DS"]
+        if sampling_type == "ensemble":
             return self.random_ensemble(states, actions)
-        elif sampling_type == 'DS':
+        elif sampling_type == "DS":
             return self.ds(states, actions)
         else:
-            raise ValueError(f'Model sampling method {sampling_type} is not supported')
+            raise ValueError(
+                f"Model sampling method {sampling_type} is not supported"
+            )
 
     def sample(self, states, actions, sampling_type, reparam_trick=True):
         """
@@ -319,7 +366,7 @@ class Model(nn.Module):
         states, actions = self._pre_process_model_inputs(states, actions)
         targets = self._pre_process_model_targets(state_deltas)
 
-        mu, var = self._propagate_network(states, actions)      # delta and variance
+        mu, var = self._propagate_network(states, actions)  # delta and variance
 
         # negative log likelihood
         loss = (mu - targets) ** 2 / var + torch.log(var)
@@ -343,12 +390,20 @@ class Model(nn.Module):
         next_states = next_states.to(self.device)
 
         with torch.no_grad():
-            mu, var = self.forward_all(states, actions)  # next state and variance. shape: (batch_size, ensemble_size, dim_state)
+            mu, var = self.forward_all(
+                states, actions
+            )  # next state and variance. shape: (batch_size, ensemble_size, dim_state)
 
-        pdf = Normal(mu, torch.sqrt(var))  # PDF for each member of the ensemble, expecting inputs shaped (batch_size, ensemble_size, dim_state)
-        log_likelihood = pdf.log_prob(next_states.unsqueeze(1).repeat(1, self.ensemble_size, 1))  # shape: (batch_size, ensemble_size, dim_state)
+        pdf = Normal(
+            mu, torch.sqrt(var)
+        )  # PDF for each member of the ensemble, expecting inputs shaped (batch_size, ensemble_size, dim_state)
+        log_likelihood = pdf.log_prob(
+            next_states.unsqueeze(1).repeat(1, self.ensemble_size, 1)
+        )  # shape: (batch_size, ensemble_size, dim_state)
         log_likelihood = log_likelihood.mean(dim=2)  # mean over all dimensions
-        log_likelihood = log_likelihood.exp().mean(dim=1).log()  # mean over all models (shape: batch_size)
+        log_likelihood = (
+            log_likelihood.exp().mean(dim=1).log()
+        )  # mean over all models (shape: batch_size)
 
         return log_likelihood
 
@@ -370,9 +425,14 @@ class Model(nn.Module):
         next_states = next_states.to(self.device)
 
         with torch.no_grad():
-            pdf = self.ds(states, actions)  # PDF for single Gaussian, expecting inputs shaped (batch_size, dim_state)
-        log_likelihood = pdf.log_prob(next_states)  # shape: (batch_size, dim_state)
-        log_likelihood = log_likelihood.mean(dim=1)  # mean over all state dimensions. shape: (batch_size)
+            pdf = self.ds(
+                states, actions
+            )  # PDF for single Gaussian, expecting inputs shaped (batch_size, dim_state)
+        log_likelihood = pdf.log_prob(
+            next_states
+        )  # shape: (batch_size, dim_state)
+        log_likelihood = log_likelihood.mean(
+            dim=1
+        )  # mean over all state dimensions. shape: (batch_size)
 
         return log_likelihood
-
