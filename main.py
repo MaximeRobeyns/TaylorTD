@@ -162,8 +162,8 @@ def policy_arch_config(n_total_steps,env_name):
     td3_expl_noise = 0.1
     grad_action = True
     grad_state = True                        # Include gradiet of TD-error relative to state
-    td3_action_cov = 0.25                            #in Taylor RL (covariance of action points) - 5 works really well (equivalent value to MAGE)
-    td3_update_order = 1                            # 1 or 2
+    td3_action_cov = 0.25                    # In Taylor TD (covariance of action points) 
+    td3_update_order = 1                            
     td3_state_cov =0.00005
     det_action = True                         # Determines whether Q in model transitions evaluated for deterministic or stochastic policy
     norm_grad_terms =True
