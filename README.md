@@ -1,6 +1,6 @@
 # TaylorTD
 
-Providing lower variance TD updates through a first-order Taylor expansion of expected TD updates.
+Providing lower variance TD updates through a first-order Taylor expansion of expected TD updates. This work has been presented at the 2023 NeurIPS conference and the corresponding paper is available [here](https://proceedings.neurips.cc/paper_files/paper/2023/file/036912a83bdbb1fd792baf6532f102d8-Paper-Conference.pdf). 
 
 # Installation Instructions
 
